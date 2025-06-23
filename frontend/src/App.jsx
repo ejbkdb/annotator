@@ -38,6 +38,21 @@ function App() {
     setLastSaveTime(newEvent.end_timestamp);
   };
 
+  const handleDeleteEvent = async (eventId) => {
+    if (!window.confirm('Are you sure you want to delete this event?')) {
+      return;
+    }
+    try {
+      await axios.delete(`/api/events/${eventId}`);
+      setEvents(prevEvents => prevEvents.filter(event => event.id !== eventId));
+      setBackendStatus('connected');
+    } catch (error) {
+      console.error(`Failed to delete event ${eventId}:`, error);
+      setBackendStatus('disconnected');
+      alert(`Failed to delete event: ${error.message || 'Server error'}`);
+    }
+  };
+
   return (
     <div className="main-container">
       <header className="header"><h1>Test Range Annotation Tool</h1></header>
@@ -45,7 +60,9 @@ function App() {
         <div className="action-panel-container">
           <ActionPanel vehicleConfigs={vehicleConfigs} onEventSaved={handleEventSaved} setBackendStatus={setBackendStatus} />
         </div>
-        <div className="event-log-container"><EventLog events={events} /></div>
+        <div className="event-log-container">
+          <EventLog events={events} onDeleteEvent={handleDeleteEvent} />
+        </div>
       </div>
       <div className="status-bar-container">
         <StatusBar status={backendStatus} eventCount={events.length} lastSaveTime={lastSaveTime} />

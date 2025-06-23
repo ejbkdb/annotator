@@ -35,4 +35,14 @@ def get_all_events_from_db() -> list[dict]:
     conn.close()
     return [dict(row) for row in rows]
 
+def delete_event_from_db(event_id: str) -> bool:
+    """Deletes an event from the database by its ID. Returns True if a row was deleted, False otherwise."""
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM events WHERE id = ?", (event_id,))
+    conn.commit()
+    deleted_rows = cursor.rowcount
+    conn.close()
+    return deleted_rows > 0
+
 # backend/database.py

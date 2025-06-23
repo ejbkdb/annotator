@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 from typing import List
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from models import Event, EventPayload, VehicleConfig
 import database
@@ -53,5 +53,31 @@ async def create_event(payload: EventPayload):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Server error: {e}")
     return event
+
+@app.delete("/api/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Events"])
+async def delete_event(event_id: str):
+    # First, delete from the database
+    if not database.delete_event_from_db(event_id):
+        raise HTTPException(status_code=404, detail=f"Event with id {event_id} not found.")
+
+    # Second, delete the corresponding JSON file.
+    # We must search for it since the creation timestamp isn't stored.
+    event_file_deleted = False
+    events_dir = "data/events"
+    try:
+        for filename in os.listdir(events_dir):
+            if filename.endswith(f"_{event_id}.json"):
+                file_path = os.path.join(events_dir, filename)
+                os.remove(file_path)
+                event_file_deleted = True
+                break
+        if not event_file_deleted:
+            # This is not critical enough to fail the request, but worth noting.
+            print(f"Warning: Deleted event {event_id} from DB, but no corresponding JSON file was found.")
+    except Exception as e:
+        # If file deletion fails, this is a server error.
+        raise HTTPException(status_code=500, detail=f"Failed to delete event file: {e}")
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 # backend/main.py

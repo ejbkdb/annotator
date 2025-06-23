@@ -1,7 +1,7 @@
 // frontend/src/components/EventLog.jsx
 import React from 'react';
 
-function EventLog({ events }) {
+function EventLog({ events, onDeleteEvent }) {
   if (!events || events.length === 0) {
     return <h2>No events logged yet.</h2>;
   }
@@ -37,10 +37,18 @@ function EventLog({ events }) {
             <li key={event.id} className="event-log-item">
               <div className="event-log-item-header">
                 <span>{event.vehicle_type.toUpperCase()}</span>
-                {/* --- UPDATED TIMESTAMP DISPLAY --- */}
-                <span className="timestamp-display">
-                  {times.local} (Local) / {times.utc} (UTC)
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <span className="timestamp-display">
+                    {times.local} (Local) / {times.utc} (UTC)
+                  </span>
+                  <button
+                    onClick={() => onDeleteEvent(event.id)}
+                    className="delete-event-button"
+                    title="Delete event"
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
               <div className="event-log-item-details">
                 <strong>ID:</strong> {event.vehicle_identifier || 'N/A'} <br />
