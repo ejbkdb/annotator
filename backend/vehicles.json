@@ -1,0 +1,37 @@
+[
+    {
+      "id": "car",
+      "displayName": "Car",
+      "category": "Ground"
+    },
+    {
+      "id": "atv",
+      "displayName": "ATV",
+      "category": "Ground"
+    },
+    {
+      "id": "truck_suv",
+      "displayName": "Truck / SUV",
+      "category": "Ground"
+    },
+    {
+      "id": "fixed_wing_drone",
+      "displayName": "Fixed-Wing Drone",
+      "category": "Air"
+    },
+    {
+      "id": "quadcopter",
+      "displayName": "Quadcopter",
+      "category": "Air"
+    },
+    {
+      "id": "airplane",
+      "displayName": "Airplane",
+      "category": "Air"
+    },
+    {
+      "id": "other",
+      "displayName": "Other...",
+      "category": "Special"
+    }
+  ]

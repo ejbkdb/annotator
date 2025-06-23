@@ -1,0 +1,9 @@
+{
+    "start_timestamp": "2025-06-23T01:33:11.315000+00:00",
+    "end_timestamp": "2025-06-23T01:33:15.173000+00:00",
+    "vehicle_type": "turkey",
+    "vehicle_identifier": "eric",
+    "direction": "West -> East",
+    "annotator_notes": "turkey jumped out of the forest",
+    "id": "c836f4d4-fd28-4a86-b68c-554a121fabbd"
+}

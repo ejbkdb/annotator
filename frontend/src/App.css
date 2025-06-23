@@ -1,0 +1,49 @@
+/* frontend/src/App.css */
+body {
+    margin: 0; font-family: system-ui, sans-serif;
+    background-color: #282c34; color: white;
+  }
+  .main-container { display: flex; flex-direction: column; height: 100vh; }
+  .header { padding: 10px 20px; background-color: #20232a; border-bottom: 1px solid #444; text-align: center; font-size: 1.2em; }
+  .content-container { display: flex; flex-grow: 1; overflow: hidden; }
+  .action-panel-container { flex: 1; padding: 20px; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .event-log-container { flex: 1; padding: 20px; overflow-y: auto; }
+  .status-bar-container { padding: 8px 20px; background-color: #20232a; border-top: 1px solid #444; font-size: 0.9em; }
+  .action-button { padding: 20px 40px; font-size: 2em; cursor: pointer; border-radius: 8px; border: none; font-weight: bold; }
+  .start-button { background-color: #2a9d8f; color: white; }
+  .end-button { background-color: #e76f51; color: white; }
+  .save-button { background-color: #2a9d8f; color: white; }
+  .cancel-button { background-color: #6c757d; color: white; }
+  .timer-display { font-size: 2.5em; margin-bottom: 20px; font-family: 'Courier New', Courier, monospace; }
+  .form-container { width: 80%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; }
+  .form-section { display: flex; flex-direction: column; }
+  .form-section label { margin-bottom: 5px; font-weight: bold; }
+  .form-section input, .form-section textarea, .form-section select { padding: 10px; border-radius: 4px; border: 1px solid #555; background-color: #3a3f4a; color: white; font-size: 1em; }
+  .form-section textarea { min-height: 80px; resize: vertical; }
+  .button-group { display: flex; flex-wrap: wrap; gap: 10px; }
+  .button-group button { padding: 10px 15px; border: 1px solid #555; background-color: #3a3f4a; color: white; cursor: pointer; border-radius: 4px; }
+  .button-group button.selected { background-color: #61dafb; color: #282c34; border-color: #61dafb; }
+  .button-pair { display: flex; gap: 10px; margin-top: 10px; }
+  .button-pair button { flex-grow: 1; padding: 12px; }
+  .event-log-list { list-style: none; padding: 0; margin: 0; }
+  .event-log-item { background-color: #3a3f4a; padding: 15px; border-radius: 4px; margin-bottom: 10px; border-left: 5px solid #61dafb; }
+  .event-log-item-header { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 8px; align-items: center; }
+  .event-log-item-details { font-size: 0.9em; color: #ccc; }
+  .status-bar { display: flex; justify-content: space-between; align-items: center; }
+  .status-indicator { display: flex; align-items: center; gap: 8px; }
+  .status-dot { width: 12px; height: 12px; border-radius: 50%; }
+  .status-dot.connected { background-color: #2a9d8f; }
+  .status-dot.disconnected { background-color: #e76f51; }
+
+/* --- NEWLY ADDED/MODIFIED STYLES --- */
+.event-log-item-header {
+    align-items: center; /* Vertically align items in the header */
+}
+
+.timestamp-display {
+    font-size: 0.9em;
+    font-weight: normal;
+    color: #ccc;
+    white-space: nowrap; /* Prevent the time from wrapping onto a new line */
+}
+/* frontend/src/App.css */
