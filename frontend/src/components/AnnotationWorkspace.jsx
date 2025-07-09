@@ -1,8 +1,9 @@
-// frontend/src/components/AnnotationWorkspace.jsx
+// frontend/src/components/AnnotationWorkspace.jsx (Updated with Chart.js integration)
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import Waveform from './Waveform';
+// --- CHANGE #1: Import the new TimeSeriesChart instead of Waveform ---
+import TimeSeriesChart from './TimeSeriesChart';
 import EventLog from './EventLog';
 import './AnnotationWorkspace.css'; 
 
@@ -17,12 +18,18 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
   const [durationSecs, setDurationSecs] = useState(10);
   const [points, setPoints] = useState(2000);
 
+  // --- CHANGE #2: Add state to hold chart data and loading status ---
+  const [chartData, setChartData] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // This function is perfect, no changes needed.
   const formatDateForInput = (date) => {
     if (!date) return '';
     const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
     return localDate.toISOString().slice(0, 19);
   };
 
+  // This hook is perfect, no changes needed.
   useEffect(() => {
     if (!selectedCollection) {
       setStartTime(null);
@@ -52,6 +59,40 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     setEvents([]);
   }, [selectedCollection]);
 
+  // --- CHANGE #3: Add a new useEffect to fetch the waveform data ---
+  // This hook runs whenever the user changes the view (time, duration, etc.)
+  useEffect(() => {
+    if (!selectedCollection || !startTime) {
+      return;
+    }
+
+    const endTime = new Date(startTime.getTime() + durationSecs * 1000);
+    const fetchWaveformData = async () => {
+      setIsLoading(true);
+      setError('');
+      try {
+        const response = await axios.get('/api/audio/waveform', {
+          params: {
+            collection: selectedCollection,
+            start: startTime.toISOString(),
+            end: endTime.toISOString(),
+            points: points,
+          },
+        });
+        setChartData(response.data);
+      } catch (err) {
+        const errorMsg = err.response?.data?.detail || 'Failed to fetch waveform';
+        setError(errorMsg);
+        setChartData([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWaveformData();
+  }, [selectedCollection, startTime, durationSecs, points]); // Re-fetches on any change
+
+  // This navigation logic is perfect, no changes needed.
   const handleNavigate = (direction) => {
     if (!startTime || !availableRange.start) return;
     const hopMs = durationSecs * 1000;
@@ -75,6 +116,7 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
 
   const endTime = startTime ? new Date(startTime.getTime() + durationSecs * 1000) : null;
 
+  // The entire return/JSX block is unchanged, except for the Waveform component replacement
   return (
     <div className="workspace-container">
       <div className="workspace-controls">
@@ -127,12 +169,12 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         </div>
       )}
 
-      <Waveform
-        collection={selectedCollection} 
-        start={startTime ? startTime.toISOString() : ''} 
-        end={endTime ? endTime.toISOString() : ''} 
-        points={points} 
-      />
+      {/* --- CHANGE #4: Replace the Waveform component with the new TimeSeriesChart --- */}
+      {isLoading ? (
+        <div style={{ height: '320px', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#aaa' }}>Loading Chart Data...</div>
+      ) : (
+        <TimeSeriesChart chartData={chartData} />
+      )}
       
       <div className="event-log-container" style={{flex: '1', width: '100%', marginTop: '20px'}}>
         <EventLog events={events} onDeleteEvent={(id) => setEvents(p => p.filter(e => e.id !== id))} />
