@@ -9,4 +9,5 @@ influxdb-client[async]
 librosa
 numpy
 python-multipart
+soundfile
 # backend/requirements.txt

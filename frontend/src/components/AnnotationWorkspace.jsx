@@ -21,7 +21,7 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
   const [chartData, setChartData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // State for the new annotation workflow
+  // State for the annotation workflow
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionRange, setSelectionRange] = useState(null);
   const [activeAnnotation, setActiveAnnotation] = useState(null);
@@ -105,20 +105,32 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
   };
 
   const handlePlayAudio = async () => {
-    if (!selectionRange) return;
+    if (!selectionRange?.start || !selectionRange?.end) return;
     setIsPlaying(true);
     try {
+      // --- THE FIX IS HERE ---
+      // Ensure timestamps are always in the clean '...Z' format that FastAPI expects.
+      const params = {
+        collection: selectedCollection,
+        start: new Date(selectionRange.start).toISOString(),
+        end: new Date(selectionRange.end).toISOString(),
+      };
+
       const response = await axios.get('/api/audio/raw', {
-        params: { collection: selectedCollection, start: selectionRange.start, end: selectionRange.end },
+        params: params, // Use the cleaned params object
         responseType: 'arraybuffer',
       });
+
       const audioBlob = new Blob([response.data], { type: 'audio/wav' });
       const audioUrl = URL.createObjectURL(audioBlob);
+      
       audioRef.current.src = audioUrl;
       audioRef.current.play();
       audioRef.current.onended = () => { setIsPlaying(false); URL.revokeObjectURL(audioUrl); };
+
     } catch (err) {
-      setError('Failed to fetch or play audio clip.'); setIsPlaying(false);
+      setError('Failed to fetch or play audio clip.');
+      setIsPlaying(false);
     }
   };
 

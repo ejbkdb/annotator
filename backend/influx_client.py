@@ -261,3 +261,26 @@ def get_collection_time_range(collection: str) -> dict | None:
             else:
                 print(f"A database error occurred while querying '{collection}': {e}")
             return None
+    
+def query_raw_audio_data(collection: str, start: str, end: str) -> np.ndarray:
+    """
+    Fetches raw amplitude values and returns them as a NumPy array.
+    """
+    with InfluxDBClient(url=INFLUXDB_URL, token=INFLUXDB_TOKEN, org=INFLUXDB_ORG, timeout=90_000) as client:
+        print(f"Querying for raw audio between {start} and {end}...")
+        query = f"""
+        from(bucket: "{collection}")
+          |> range(start: {start}, stop: {end})
+          |> filter(fn: (r) => r["_measurement"] == "audio_samples" and r["_field"] == "amplitude")
+          |> sort(columns: ["_time"])
+        """
+        tables = client.query_api().query(query=query, org=INFLUXDB_ORG)
+        
+        samples = []
+        for table in tables:
+            for record in table.records:
+                samples.append(record.get_value())
+        
+        print(f"Successfully extracted {len(samples)} raw samples.")
+        # Return as a NumPy array with the correct integer type
+        return np.array(samples, dtype=np.int16)

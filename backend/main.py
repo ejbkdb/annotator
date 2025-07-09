@@ -13,6 +13,12 @@ from models import Event, EventPayload, VehicleConfig
 import database
 
 import influx_client
+import io
+import wave
+import struct
+from fastapi.responses import StreamingResponse
+import soundfile as sf
+import numpy as np
 
 PROJECT_ROOT = Path(__file__).parent
 app = FastAPI(title="Test Range Annotation API")
@@ -147,6 +153,29 @@ async def get_collection_info(collection_name: str):
             detail=f"No data or time range found for collection '{collection_name}'."
         )
     return {"time_range": time_range}
+
+@router_audio.get("/api/audio/raw")
+async def get_raw_audio_clip(collection: str, start: str, end: str):
+    """
+    Fetches raw audio samples, converts them to a WAV file in memory, and streams it.
+    """
+    # IMPORTANT: Adjust this to your actual sample rate if it's different.
+    SAMPLE_RATE = 48000 
+
+    # 1. Get the raw samples as a NumPy array
+    np_samples = influx_client.query_raw_audio_data(collection, start, end)
+
+    if np_samples.size == 0:
+        raise HTTPException(status_code=404, detail="No audio data found for the requested range.")
+
+    # 2. Use soundfile to write the NumPy array to an in-memory buffer
+    buffer = io.BytesIO()
+    sf.write(buffer, np_samples, samplerate=SAMPLE_RATE, format='WAV', subtype='PCM_16')
+    buffer.seek(0)
+
+    # 3. Stream the in-memory WAV file back to the client
+    return StreamingResponse(buffer, media_type="audio/wav")
+
 # Include all routers
 app.include_router(router_status)
 app.include_router(router_config)
