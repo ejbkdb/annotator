@@ -63,3 +63,116 @@ body {
 .delete-event-button:hover {
   color: #fca089; /* A lighter shade for hover */
 }
+
+/* --- STYLES FOR TABBED INTERFACE --- */
+.content-tabs {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  overflow: hidden;
+}
+.react-tabs__tab-list {
+  background-color: #20232a;
+  border-bottom: 1px solid #444;
+  margin: 0;
+  padding: 0 10px;
+}
+.react-tabs__tab {
+  display: inline-block;
+  border: 1px solid transparent;
+  border-bottom: none;
+  bottom: -1px;
+  position: relative;
+  list-style: none;
+  padding: 8px 16px;
+  cursor: pointer;
+  color: #ccc;
+}
+.react-tabs__tab--selected {
+  background: #282c34;
+  border-color: #444;
+  color: white;
+  border-radius: 5px 5px 0 0;
+}
+.react-tabs__tab--disabled {
+  color: #666;
+  cursor: default;
+}
+.react-tabs__tab-panel {
+  display: none;
+  flex-grow: 1;
+}
+.react-tabs__tab-panel--selected {
+  display: flex; /* Make panel take up space */
+  flex-direction: column;
+  height: 100%;
+}
+.file-based-container {
+  padding: 20px;
+  justify-content: flex-start;
+  align-items: center;
+  width: 100%;
+}
+
+/* --- Ingestion View Styles --- */
+.ingestion-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 30px;
+  background-color: #3a3f4a;
+  border-radius: 8px;
+  width: 100%;
+  max-width: 600px;
+}
+.ingestion-container h2 {
+  margin-top: 0;
+  text-align: center;
+}
+.ingestion-container input[type="text"],
+.ingestion-container input[type="file"] {
+  width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+}
+.ingestion-button {
+  padding: 12px 20px;
+  font-size: 1.2em;
+  background-color: #2a9d8f;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ingestion-button:disabled {
+  background-color: #555;
+  cursor: not-allowed;
+}
+
+/* --- Annotation Workspace Styles --- */
+.workspace-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.workspace-controls {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+.workspace-controls label {
+  font-weight: bold;
+}
+.workspace-controls select {
+  padding: 8px;
+  background-color: #3a3f4a;
+  color: white;
+  border: 1px solid #555;
+  border-radius: 4px;
+}
+#waveform {
+  width: 100%;
+  height: 200px;
+  background-color: #20232a;
+}

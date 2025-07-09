@@ -4,5 +4,9 @@ fastapi
 uvicorn[standard]
 pydantic
 aiofiles
-
+python-dotenv
+influxdb-client[async]
+librosa
+numpy
+python-multipart
 # backend/requirements.txt

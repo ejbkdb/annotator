@@ -1,0 +1,76 @@
+/* frontend/src/components/AnnotationWorkspace.css (NEW FILE) */
+
+.time-controls-panel {
+  margin: 20px 0;
+  padding: 15px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background-color: #20232a;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.control-label {
+  font-weight: bold;
+  color: #ccc;
+}
+
+.button-tabs {
+  display: flex;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #555;
+}
+
+.tab-button {
+  padding: 8px 16px;
+  background-color: #3a3f4a;
+  color: white;
+  border: none;
+  cursor: pointer;
+  border-left: 1px solid #555;
+  transition: background-color 0.2s;
+}
+
+.tab-button:first-child {
+  border-left: none;
+}
+
+.tab-button:hover {
+  background-color: #4a4f5a;
+}
+
+.tab-button.selected {
+  background-color: #61dafb;
+  color: #20232a;
+  font-weight: bold;
+}
+
+.navigation-group {
+    gap: 15px;
+}
+
+.nav-button {
+  padding: 8px 16px;
+  font-weight: bold;
+  background-color: #2a9d8f;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.start-time-input {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
