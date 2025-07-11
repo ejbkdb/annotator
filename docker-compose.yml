@@ -3,11 +3,13 @@ services:
   influxdb:
     image: influxdb:2.7
     container_name: influxdb_annotator
+    security_opt:
+      - "label=disable"
     user: "0:0"
     ports:
       - "8086:8086"
     volumes:
-      - ./influxdb_data:/var/lib/influxdb2rw
+      - ./influxdb_data:/var/lib/influxdb2:U
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=admin
@@ -15,3 +17,4 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=my-org
       - DOCKER_INFLUXDB_INIT_BUCKET=default_audio
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-token
+
