@@ -1,20 +1,36 @@
-version: '3.8'
-services:
-  influxdb:
-    image: influxdb:2.7
-    container_name: influxdb_annotator
-    security_opt:
-      - "label=disable"
-    user: "0:0"
-    ports:
-      - "8086:8086"
-    volumes:
-      - ./influxdb_data:/var/lib/influxdb2:U
-    environment:
-      - DOCKER_INFLUXDB_INIT_MODE=setup
-      - DOCKER_INFLUXDB_INIT_USERNAME=admin
-      - DOCKER_INFLUXDB_INIT_PASSWORD=password123
-      - DOCKER_INFLUXDB_INIT_ORG=my-org
-      - DOCKER_INFLUXDB_INIT_BUCKET=default_audio
-      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-token
+# docker-compose.yml
 
+# This file defines the services that make up your application's infrastructure.
+# For this project, it's just the QuestDB time-series database.
+# The Python backend will be run separately from your terminal and will connect to this service.
+
+version: '3.8'
+
+services:
+  questdb:
+    # Use a specific, recent, and stable version of the official QuestDB image.
+    image: questdb/questdb:8.0.3
+    
+    # Give the container a consistent and recognizable name.
+    container_name: questdb_annotator
+    
+    # Map the necessary ports from the container to your host machine.
+    ports:
+      - "9000:9000"  # Web Console & REST API. Access at http://localhost:9000
+      - "8812:8812"  # PostgreSQL wire protocol. Your backend will use this for SQL queries.
+      - "9009:9009"  # InfluxDB Line Protocol. Your backend will use this for high-speed data ingestion.
+    
+    # Persist the database data on your host machine.
+    # This ensures your data is not lost when the container is stopped or removed.
+    # The ':Z' flag is important for Podman on SELinux systems to handle permissions.
+    volumes:
+      - ./questdb_data:/var/lib/questdb/db:Z
+      
+    # Set resource limits for the container.
+    # This prevents the database from consuming all your system's memory.
+    # This syntax is compatible with podman-compose.
+    mem_limit: 8g
+    mem_reservation: 4g
+    
+    # Ensure the container restarts automatically if it crashes.
+    restart: unless-stopped
