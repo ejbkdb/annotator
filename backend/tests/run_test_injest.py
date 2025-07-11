@@ -5,7 +5,7 @@ from multiprocessing import Pool, cpu_count
 from backend import questdb_client
 
 # --- CONFIGURE YOUR TEST HERE ---
-TEST_FILE_PATH = "/home/eborcherding/Documents/florida/test/24F319046484A67E_20250623_140000.WAV"
+TEST_FILE_PATH = "/home/eborcherding/Documents/florida/moth/24F319046484A67E_20250623_160000.WAV"
 TEST_COLLECTION_NAME = "my_hardcoded_test"
 # --------------------------------
 
