@@ -2,7 +2,7 @@
 import time
 from multiprocessing import Pool, cpu_count
 # Use the correct package import
-from . import questdb_client
+from backend import questdb_client
 
 # --- CONFIGURE YOUR TEST HERE ---
 TEST_FILE_PATH = "/home/eborcherding/Documents/florida/test/24F319046484A67E_20250623_140000.WAV"

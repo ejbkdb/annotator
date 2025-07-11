@@ -6,6 +6,10 @@ import TimeSeriesChart from './TimeSeriesChart';
 import EventLog from './EventLog';
 import './AnnotationWorkspace.css';
 
+// --- NEW: Import the modular time utilities ---
+// This assumes you have created the file 'frontend/src/utils/time.js'
+import { parseISOString, formatForInput } from '../utils/time';
+
 const DURATION_OPTIONS = [5, 10, 20, 50, 100];
 
 function AnnotationWorkspace({ collections, selectedCollection, setSelectedCollection }) {
@@ -28,15 +32,17 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef(new Audio());
 
-  // Fetch vehicle configs for the form on component mount
+  // Fetch vehicle configs on component mount
   useEffect(() => {
     axios.get('/api/config/vehicles').then(res => setVehicleConfigs(res.data));
   }, []);
 
-  // Fetch initial collection info
+  // Fetch initial collection info when the selected collection changes
   useEffect(() => {
     if (!selectedCollection) {
-      setStartTime(null); setAvailableRange({ start: null, end: null }); setChartData([]);
+      setStartTime(null); 
+      setAvailableRange({ start: null, end: null }); 
+      setChartData([]);
       return;
     }
     const fetchCollectionInfo = async () => {
@@ -44,10 +50,13 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         setError('');
         const response = await axios.get(`/api/audio/collections/${selectedCollection}/info`);
         const { start, end } = response.data.time_range;
-        const startDate = new Date(start);
-        const endDate = new Date(end);
-        setAvailableRange({ start: startDate, end: endDate });
-        setStartTime(startDate);
+        
+        // Use the modular utility to correctly parse API strings as UTC Dates
+        const startUTC = parseISOString(start);
+        const endUTC = parseISOString(end);
+        
+        setAvailableRange({ start: startUTC, end: endUTC });
+        setStartTime(startUTC);
       } catch (err) {
         const errorMsg = err.response?.data?.detail || err.message;
         setError(`Could not fetch time range for '${selectedCollection}': ${errorMsg}`);
@@ -59,16 +68,20 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     setEvents([]);
   }, [selectedCollection]);
 
-  // Fetch waveform data whenever the view changes
+  // Fetch waveform data whenever the view (time, duration, etc.) changes
   useEffect(() => {
     if (!selectedCollection || !startTime) return;
+    
+    // Standard Date objects handle UTC math correctly
     const endTime = new Date(startTime.getTime() + durationSecs * 1000);
+    
     const fetchWaveformData = async () => {
       setIsLoading(true); setError('');
       try {
         const response = await axios.get('/api/audio/waveform', {
           params: {
             collection: selectedCollection,
+            // .toISOString() is UTC-safe and produces the required 'Z' format
             start: startTime.toISOString(),
             end: endTime.toISOString(),
             points: points,
@@ -84,16 +97,21 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
   }, [selectedCollection, startTime, durationSecs, points]);
 
   const handleChartClick = (timestamp) => {
+    // The timestamp from the chart is already a Z-suffixed ISO string
+    const clickedDate = parseISOString(timestamp);
+
     if (!isSelecting) {
       setIsSelecting(true);
-      setSelectionRange({ start: timestamp, end: null });
+      setSelectionRange({ start: clickedDate, end: null });
       setActiveAnnotation(null);
     } else {
       let finalStart = selectionRange.start;
-      let finalEnd = timestamp;
-      if (new Date(finalEnd) < new Date(finalStart)) {
+      let finalEnd = clickedDate;
+      
+      if (finalEnd < finalStart) {
         [finalStart, finalEnd] = [finalEnd, finalStart];
       }
+      
       setSelectionRange({ start: finalStart, end: finalEnd });
       setIsSelecting(false);
       setActiveAnnotation({ vehicle_type: '', vehicle_identifier: '', annotator_notes: '' });
@@ -107,17 +125,14 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
   const handlePlayAudio = async () => {
     if (!selectionRange?.start || !selectionRange?.end) return;
     setIsPlaying(true);
+    
     try {
-      // --- THE FIX IS HERE ---
-      // Ensure timestamps are always in the clean '...Z' format that FastAPI expects.
-      const params = {
-        collection: selectedCollection,
-        start: new Date(selectionRange.start).toISOString(),
-        end: new Date(selectionRange.end).toISOString(),
-      };
-
       const response = await axios.get('/api/audio/raw', {
-        params: params, // Use the cleaned params object
+        params: {
+          collection: selectedCollection,
+          start: selectionRange.start.toISOString(),
+          end: selectionRange.end.toISOString(),
+        },
         responseType: 'arraybuffer',
       });
 
@@ -129,6 +144,7 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
       audioRef.current.onended = () => { setIsPlaying(false); URL.revokeObjectURL(audioUrl); };
 
     } catch (err) {
+      console.error('Audio playback error:', err);
       setError('Failed to fetch or play audio clip.');
       setIsPlaying(false);
     }
@@ -139,12 +155,14 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         alert("Please select a vehicle type.");
         return;
     }
+    
     const eventPayload = {
         ...activeAnnotation,
-        start_timestamp: selectionRange.start,
-        end_timestamp: selectionRange.end,
-        direction: 'N/A'
+        start_timestamp: selectionRange.start.toISOString(),
+        end_timestamp: selectionRange.end.toISOString(),
+        direction: 'N/A' // Defaulting direction
     };
+    
     try {
         const response = await axios.post('/api/events', eventPayload);
         setEvents(prev => [response.data, ...prev]);
@@ -154,19 +172,29 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
 
   const handleNavigate = (direction) => {
     if (!startTime || !availableRange.start) return;
+    
     const hopMs = durationSecs * 1000;
-    let newStartMs = direction === 'next' ? startTime.getTime() + hopMs : startTime.getTime() - hopMs;
+    const currentMs = startTime.getTime();
+    let newMs = direction === 'next' ? currentMs + hopMs : currentMs - hopMs;
+    
     const availableStartMs = availableRange.start.getTime();
     const availableEndMs = availableRange.end.getTime();
-    if (newStartMs < availableStartMs) newStartMs = availableStartMs;
-    if (newStartMs >= (availableEndMs - hopMs)) newStartMs = availableEndMs - hopMs;
-    setStartTime(new Date(newStartMs));
+    
+    // Constrain the new start time to be within the available data range
+    if (newMs < availableStartMs) newMs = availableStartMs;
+    if (newMs >= (availableEndMs - hopMs)) newMs = availableEndMs - hopMs;
+    
+    setStartTime(new Date(newMs));
   };
-  
-  const formatDateForInput = (date) => {
-    if (!date) return '';
-    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-    return localDate.toISOString().slice(0, 19);
+
+  const handleTimeInputChange = (e) => {
+    const inputValue = e.target.value;
+    if (!inputValue) return;
+    
+    // A datetime-local input produces a string like "YYYY-MM-DDTHH:mm:ss".
+    // Append 'Z' to explicitly tell the Date constructor to parse it as UTC.
+    const userDate = new Date(inputValue + 'Z');
+    setStartTime(userDate);
   };
 
   return (
@@ -185,36 +213,95 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         <div className="time-controls-panel">
           <div className="control-group">
             <span className="control-label">Window:</span>
-            <div className="button-tabs">{DURATION_OPTIONS.map(d => (<button key={d} className={`tab-button ${d === durationSecs ? 'selected' : ''}`} onClick={() => setDurationSecs(d)}>{d}s</button>))}</div>
+            <div className="button-tabs">
+              {DURATION_OPTIONS.map(d => (
+                <button 
+                  key={d} 
+                  className={`tab-button ${d === durationSecs ? 'selected' : ''}`} 
+                  onClick={() => setDurationSecs(d)}
+                >
+                  {d}s
+                </button>
+              ))}
+            </div>
           </div>
           <div className="control-group navigation-group">
             <button className="nav-button" onClick={() => handleNavigate('prev')}>{'<<'} Prev</button>
-            <div className="start-time-input"><label htmlFor="start-time">Start Time:</label><input type="datetime-local" id="start-time" value={formatDateForInput(startTime)} onChange={(e) => setStartTime(new Date(e.target.value))} step="1"/></div>
+            <div className="start-time-input">
+              <label htmlFor="start-time">Start Time (UTC):</label>
+              <input 
+                type="datetime-local" 
+                id="start-time" 
+                // Use the utility to correctly format the date for the input
+                value={formatForInput(startTime)} 
+                onChange={handleTimeInputChange}
+                step="1"
+              />
+            </div>
             <button className="nav-button" onClick={() => handleNavigate('next')}>Next {'>>'}</button>
           </div>
-          <div className="control-group"><label htmlFor="points-slider" className="control-label">Detail ({points} pts):</label><input type="range" id="points-slider" min="500" max="10000" step="100" value={points} onChange={(e) => setPoints(Number(e.target.value))} /></div>
+          <div className="control-group">
+            <label htmlFor="points-slider" className="control-label">Detail ({points} pts):</label>
+            <input 
+              type="range" 
+              id="points-slider" 
+              min="500" 
+              max="10000" 
+              step="100" 
+              value={points} 
+              onChange={(e) => setPoints(Number(e.target.value))} 
+            />
+          </div>
         </div>
       )}
 
       {isLoading ? (
-        <div style={{ height: '320px', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#aaa' }}>Loading Chart Data...</div>
+        <div style={{ height: '320px', display: 'flex', justifyContent: 'center', alignItems: 'center', color: '#aaa' }}>
+          Loading Chart Data...
+        </div>
       ) : (
-        <TimeSeriesChart chartData={chartData} onChartClick={handleChartClick} selection={selectionRange} />
+        <TimeSeriesChart 
+          chartData={chartData} 
+          onChartClick={handleChartClick} 
+          selection={selectionRange} 
+        />
       )}
-      {isSelecting && <div className="selection-prompt">Click a second point on the chart to finish selection... (or <button className="link-button" onClick={cancelSelection}>Cancel</button>)</div>}
+      
+      {isSelecting && (
+        <div className="selection-prompt">
+          Click a second point on the chart to finish selection... (or{' '}
+          <button className="link-button" onClick={cancelSelection}>Cancel</button>)
+        </div>
+      )}
 
       {activeAnnotation && selectionRange && (
         <div className="annotation-form">
           <h4>New Annotation</h4>
-          <p>Duration: {((new Date(selectionRange.end) - new Date(selectionRange.start))/1000).toFixed(2)}s</p>
-          <select value={activeAnnotation.vehicle_type} onChange={e => setActiveAnnotation(p => ({...p, vehicle_type: e.target.value}))}>
+          <p>
+            Duration: {((selectionRange.end - selectionRange.start)/1000).toFixed(2)}s
+          </p>
+          <select 
+            value={activeAnnotation.vehicle_type} 
+            onChange={e => setActiveAnnotation(p => ({...p, vehicle_type: e.target.value}))}
+          >
             <option value="">-- Select Vehicle --</option>
             {vehicleConfigs.map(v => <option key={v.id} value={v.displayName}>{v.displayName}</option>)}
           </select>
-          <input type="text" placeholder="Identifier (optional)" value={activeAnnotation.vehicle_identifier} onChange={e => setActiveAnnotation(p => ({...p, vehicle_identifier: e.target.value}))}/>
-          <textarea placeholder="Notes..." value={activeAnnotation.annotator_notes} onChange={e => setActiveAnnotation(p => ({...p, annotator_notes: e.target.value}))}></textarea>
+          <input 
+            type="text" 
+            placeholder="Identifier (optional)" 
+            value={activeAnnotation.vehicle_identifier} 
+            onChange={e => setActiveAnnotation(p => ({...p, vehicle_identifier: e.target.value}))}
+          />
+          <textarea 
+            placeholder="Notes..." 
+            value={activeAnnotation.annotator_notes} 
+            onChange={e => setActiveAnnotation(p => ({...p, annotator_notes: e.target.value}))}
+          />
           <div className="form-actions">
-            <button onClick={handlePlayAudio} disabled={isPlaying}>{isPlaying ? 'Playing...' : 'Play Audio'}</button>
+            <button onClick={handlePlayAudio} disabled={isPlaying}>
+              {isPlaying ? 'Playing...' : 'Play Audio'}
+            </button>
             <button onClick={handleSaveAnnotation} className="save-button">Save Event</button>
             <button onClick={cancelSelection}>Cancel</button>
           </div>
@@ -222,7 +309,10 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
       )}
 
       <div className="event-log-container" style={{flex: '1', width: '100%', marginTop: '20px'}}>
-        <EventLog events={events} onDeleteEvent={(id) => setEvents(p => p.filter(e => e.id !== id))} />
+        <EventLog 
+          events={events} 
+          onDeleteEvent={(id) => setEvents(p => p.filter(e => e.id !== id))} 
+        />
       </div>
     </div>
   );
