@@ -3,22 +3,13 @@
 import React from 'react';
 import { Line } from 'react-chartjs-2';
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
+  Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler,
 } from 'chart.js';
 import annotationPlugin from 'chartjs-plugin-annotation';
 
-// Register all the necessary components for Chart.js
 ChartJS.register(
   CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler,
-  annotationPlugin // Register the annotation plugin
+  annotationPlugin
 );
 
 const TimeSeriesChart = ({ chartData, onChartClick, selection }) => {
@@ -26,8 +17,19 @@ const TimeSeriesChart = ({ chartData, onChartClick, selection }) => {
     return <div style={{height: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888'}}>No waveform data to display for the selected range.</div>;
   }
 
-  // Map our data into the format Chart.js expects
-  const labels = chartData.map(d => new Date(d.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', fractionalSecondDigits: 3, hour12: false }));
+  // --- APPLYING THE FIX ---
+  // Map our data into the format Chart.js expects, forcing UTC display.
+  const labels = chartData.map(d =>
+    new Date(d.time).toLocaleTimeString('en-GB', {
+      timeZone: 'UTC', // <-- Force UTC timezone for display
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      fractionalSecondDigits: 3
+    })
+  );
+  // --- END OF FIX ---
+
   const minData = chartData.map(d => d.min);
   const maxData = chartData.map(d => d.max);
 
@@ -42,7 +44,7 @@ const TimeSeriesChart = ({ chartData, onChartClick, selection }) => {
         pointRadius: 0,
         borderWidth: 1.5,
         tension: 0.1,
-        fill: '+1', // Fill to the next dataset (index + 1)
+        fill: '+1',
       },
       {
         label: 'Min Amplitude',
@@ -52,17 +54,14 @@ const TimeSeriesChart = ({ chartData, onChartClick, selection }) => {
         pointRadius: 0,
         borderWidth: 1.5,
         tension: 0.1,
-        fill: 'origin', // Fill down to the zero line
+        fill: 'origin',
       },
     ],
   };
 
-  // Convert selection timestamps to chart data indices for drawing the box
   let selectionIndices = null;
   if (selection && selection.start) {
     const startIndex = chartData.findIndex(d => new Date(d.time) >= new Date(selection.start));
-    
-    // If only the start is selected, highlight a single point
     let endIndex = startIndex;
     if (selection.end) {
       endIndex = chartData.findIndex(d => new Date(d.time) >= new Date(selection.end));
@@ -81,7 +80,7 @@ const TimeSeriesChart = ({ chartData, onChartClick, selection }) => {
         if (elements.length > 0) {
             const dataIndex = elements[0].index;
             const timestamp = chartData[dataIndex].time;
-            onChartClick(timestamp); // Pass the click timestamp up to the parent
+            onChartClick(timestamp);
         }
     },
     plugins: {
@@ -89,7 +88,6 @@ const TimeSeriesChart = ({ chartData, onChartClick, selection }) => {
       tooltip: { enabled: false },
       annotation: {
         annotations: {
-          // If a selection exists, draw the annotation box
           ...(selectionIndices && {
             selectionBox: {
               type: 'box',
@@ -104,14 +102,8 @@ const TimeSeriesChart = ({ chartData, onChartClick, selection }) => {
       }
     },
     scales: {
-      x: {
-        ticks: { color: '#999' },
-        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-      },
-      y: {
-        ticks: { color: '#999' },
-        grid: { color: 'rgba(255, 255, 255, 0.1)' },
-      },
+      x: { ticks: { color: '#999' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
+      y: { ticks: { color: '#999' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
     },
   };
 
