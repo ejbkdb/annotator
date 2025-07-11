@@ -1,6 +1,6 @@
 # backend/database.py
 import sqlite3
-from models import Event
+from .models import Event
 
 DATABASE_FILE = "test_range.db"
 

@@ -3,3 +3,4 @@ t.txt
 *.pyc
 *.db
 data/
+*questdb_data
