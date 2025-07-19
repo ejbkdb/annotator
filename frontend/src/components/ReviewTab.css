@@ -3,19 +3,54 @@
   width: 100%;
   max-width: 900px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 0; /* Padding is now on the parent */
+
+  /* --- MODIFIED: Make this a flex container that fills height --- */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
 
-.review-container h2 {
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   border-bottom: 2px solid #61dafb;
   padding-bottom: 10px;
   margin-bottom: 15px;
+  /* --- MODIFIED: Prevent header from shrinking --- */
+  flex-shrink: 0;
+}
+
+.review-container > p {
+    /* --- NEW: Prevent paragraph from shrinking --- */
+    flex-shrink: 0;
+}
+
+.sort-button {
+  background-color: #3a3f4a;
+  color: white;
+  border: 1px solid #555;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.sort-button:hover {
+  background-color: #4a4f5a;
+  border-color: #777;
 }
 
 .review-list {
   display: flex;
   flex-direction: column;
-  gap: 12px; /* Increased gap for better separation */
+  gap: 12px;
+  /* --- MODIFIED: These lines enable the scrolling --- */
+  flex-grow: 1; /* Allow the list to expand and fill available space */
+  overflow-y: auto; /* Show a vertical scrollbar ONLY when needed */
+  padding-right: 10px; /* Add some space for the scrollbar */
 }
 
 .review-item {
@@ -25,17 +60,16 @@
   background-color: #3a3f4a;
   padding: 15px 20px;
   border-radius: 4px;
-  border-left: 5px solid #e76f51; /* Orange to signify 'pending' */
+  border-left: 5px solid #e76f51;
 }
 
 .review-item-details {
   display: flex;
   flex-direction: column;
-  gap: 8px; /* Spacing between each detail row */
-  flex-grow: 1; /* Allow details to take up available space */
+  gap: 8px;
+  flex-grow: 1;
 }
 
-/* --- NEW STYLES FOR THE DETAIL ROWS --- */
 .detail-row {
     display: flex;
     align-items: center;
@@ -44,8 +78,8 @@
 .detail-label {
     font-weight: bold;
     color: #ccc;
-    width: 120px; /* Fixed width for alignment */
-    flex-shrink: 0; /* Prevent the label from shrinking */
+    width: 120px;
+    flex-shrink: 0;
 }
 
 .detail-value {
@@ -56,20 +90,19 @@
 .detail-value.type {
     font-weight: bold;
     font-size: 1.1em;
-    color: #61dafb; /* Highlight the vehicle type */
+    color: #61dafb;
 }
-/* --- END OF NEW STYLES --- */
 
 .review-button {
   background-color: #2a9d8f;
   color: white;
   border: none;
   font-weight: bold;
-  padding: 12px 24px; /* Made button slightly larger */
+  padding: 12px 24px;
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.2s;
-  margin-left: 20px; /* Add space between details and button */
+  margin-left: 20px;
 }
 
 .review-button:hover {

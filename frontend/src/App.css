@@ -101,6 +101,8 @@ body {
 .react-tabs__tab-panel {
   display: none;
   flex-grow: 1;
+  /* --- MODIFIED: Ensure panels can manage their own overflow --- */
+  overflow-y: auto;
 }
 .react-tabs__tab-panel--selected {
   display: flex; /* Make panel take up space */
@@ -112,6 +114,8 @@ body {
   justify-content: flex-start;
   align-items: center;
   width: 100%;
+  /* --- MODIFIED: Ensure proper sizing within flex container --- */
+  box-sizing: border-box;
 }
 
 /* --- Ingestion View Styles --- */
