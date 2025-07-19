@@ -12,20 +12,10 @@
   margin-bottom: 15px;
 }
 
-.refresh-button {
-    background-color: #6c757d;
-    color: white;
-    border: none;
-    padding: 10px 15px;
-    border-radius: 4px;
-    cursor: pointer;
-    margin-bottom: 20px;
-}
-
 .review-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px; /* Increased gap for better separation */
 }
 
 .review-item {
@@ -33,7 +23,7 @@
   justify-content: space-between;
   align-items: center;
   background-color: #3a3f4a;
-  padding: 15px;
+  padding: 15px 20px;
   border-radius: 4px;
   border-left: 5px solid #e76f51; /* Orange to signify 'pending' */
 }
@@ -41,27 +31,45 @@
 .review-item-details {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px; /* Spacing between each detail row */
+  flex-grow: 1; /* Allow details to take up available space */
 }
 
-.review-item-details strong {
-  font-size: 1.2em;
+/* --- NEW STYLES FOR THE DETAIL ROWS --- */
+.detail-row {
+    display: flex;
+    align-items: center;
 }
 
-.review-item-details span {
-  font-size: 0.9em;
-  color: #ccc;
+.detail-label {
+    font-weight: bold;
+    color: #ccc;
+    width: 120px; /* Fixed width for alignment */
+    flex-shrink: 0; /* Prevent the label from shrinking */
 }
+
+.detail-value {
+    font-family: 'Courier New', Courier, monospace;
+    color: white;
+}
+
+.detail-value.type {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #61dafb; /* Highlight the vehicle type */
+}
+/* --- END OF NEW STYLES --- */
 
 .review-button {
   background-color: #2a9d8f;
   color: white;
   border: none;
   font-weight: bold;
-  padding: 10px 20px;
+  padding: 12px 24px; /* Made button slightly larger */
   border-radius: 4px;
   cursor: pointer;
   transition: background-color 0.2s;
+  margin-left: 20px; /* Add space between details and button */
 }
 
 .review-button:hover {

@@ -6,7 +6,6 @@ import 'react-tabs/style/react-tabs.css'; // Default styles
 import RealtimeAnnotationTab from './components/RealtimeAnnotationTab';
 import FileAnnotationTab from './components/FileAnnotationTab';
 import ReviewTab from './components/ReviewTab';
-import StatusBar from './components/StatusBar'; // Can be shared or moved
 
 function App() {
   const [tabIndex, setTabIndex] = useState(0);
@@ -19,7 +18,7 @@ function App() {
 
   return (
     <div className="main-container">
-      <header className="header"><h1>Test Range Annotation Tool</h1></header>
+      {/* --- CHANGE: The main header element has been removed --- */}
       <Tabs className="content-tabs" selectedIndex={tabIndex} onSelect={(index) => setTabIndex(index)}>
         <TabList>
           <Tab>Real-time Annotation</Tab>
@@ -43,7 +42,6 @@ function App() {
             </div>
         </TabPanel>
       </Tabs>
-      {/* StatusBar can be enhanced to show context-specific info */}
     </div>
   );
 }

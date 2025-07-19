@@ -25,8 +25,8 @@ function ReviewTab({ onJumpTo }) {
   useEffect(() => {
     const interval = setInterval(() => {
         fetchManualEvents();
-    }, 5000);
-    fetchManualEvents();
+    }, 5000); // Continue to refresh the list every 5 seconds
+    fetchManualEvents(); // Initial fetch
     return () => clearInterval(interval);
   }, []);
 
@@ -57,6 +57,12 @@ function ReviewTab({ onJumpTo }) {
       console.error(err);
     }
   };
+  
+  // Helper to format timestamps for display
+  const formatTimestamp = (isoString) => {
+      if (!isoString) return 'N/A';
+      return new Date(isoString).toLocaleString();
+  }
 
   if (isLoading && manualEvents.length === 0) return <div>Loading events for review...</div>;
   if (error) return <div style={{ color: 'red' }}>{error}</div>;
@@ -73,9 +79,28 @@ function ReviewTab({ onJumpTo }) {
           manualEvents.map(event => (
             <div key={event.id} className="review-item">
               <div className="review-item-details">
-                <strong>{event.vehicle_type}</strong>
-                <span>{new Date(event.start_timestamp).toLocaleString()}</span>
-                <span>Duration: {((new Date(event.end_timestamp) - new Date(event.start_timestamp))/1000).toFixed(1)}s</span>
+                {/* --- START OF CHANGES --- */}
+                <div className="detail-row">
+                    <span className="detail-label">Vehicle Type:</span>
+                    <span className="detail-value type">{event.vehicle_type}</span>
+                </div>
+                <div className="detail-row">
+                    <span className="detail-label">Identifier:</span>
+                    <span className="detail-value">{event.vehicle_identifier || 'N/A'}</span>
+                </div>
+                <div className="detail-row">
+                    <span className="detail-label">Start Time:</span>
+                    <span className="detail-value">{formatTimestamp(event.start_timestamp)}</span>
+                </div>
+                <div className="detail-row">
+                    <span className="detail-label">End Time:</span>
+                    <span className="detail-value">{formatTimestamp(event.end_timestamp)}</span>
+                </div>
+                <div className="detail-row">
+                    <span className="detail-label">Duration:</span>
+                    <span className="detail-value">{((new Date(event.end_timestamp) - new Date(event.start_timestamp))/1000).toFixed(1)}s</span>
+                </div>
+                {/* --- END OF CHANGES --- */}
               </div>
               <button onClick={() => handleReviewClick(event)} className="review-button">
                 Review

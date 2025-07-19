@@ -113,6 +113,7 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
       
       setSelectionRange({ start: finalStart, end: finalEnd });
       setIsSelecting(false);
+      // This part is already correct and inherits the data
       setActiveAnnotation({ 
           vehicle_type: sourceEvent?.vehicle_type || '', 
           vehicle_identifier: sourceEvent?.vehicle_identifier || '', 
@@ -123,6 +124,9 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
 
   const cancelSelection = () => {
     setIsSelecting(false); setSelectionRange(null); setActiveAnnotation(null);
+    if (sourceEvent) {
+        onReviewComplete();
+    }
   };
 
   const handlePlayAudio = async () => {
@@ -159,8 +163,13 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         return;
     }
     
+    // Find the displayName from the ID to save in the refined event
+    const vehicleConfig = vehicleConfigs.find(v => v.id === activeAnnotation.vehicle_type);
+    const vehicleDisplayName = vehicleConfig ? vehicleConfig.displayName : activeAnnotation.vehicle_type;
+
     const eventPayload = {
         ...activeAnnotation,
+        vehicle_type: vehicleDisplayName, // Save the human-readable name
         start_timestamp: selectionRange.start.toISOString(),
         end_timestamp: selectionRange.end.toISOString(),
         direction: 'N/A',
@@ -297,7 +306,8 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
             onChange={e => setActiveAnnotation(p => ({...p, vehicle_type: e.target.value}))}
           >
             <option value="">-- Select Vehicle --</option>
-            {vehicleConfigs.map(v => <option key={v.id} value={v.displayName}>{v.displayName}</option>)}
+            {/* --- FIX: The 'value' attribute now uses the vehicle ID --- */}
+            {vehicleConfigs.map(v => <option key={v.id} value={v.id}>{v.displayName}</option>)}
           </select>
           <input 
             type="text" 
