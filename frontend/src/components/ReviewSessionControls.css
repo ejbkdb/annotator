@@ -1,0 +1,44 @@
+/* frontend/src/components/ReviewSessionControls.css */
+.review-session-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background-color: #3a3f4a;
+  border: 1px solid #e76f51;
+  border-radius: 6px;
+  color: #fca089;
+  margin-bottom: 20px;
+}
+
+.review-session-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.1em;
+}
+
+.review-session-info strong {
+    color: white;
+    font-weight: bold;
+}
+
+.review-session-instructions {
+  color: #ccc;
+  font-style: italic;
+}
+
+.end-review-button {
+  background-color: #e76f51;
+  color: white;
+  border: none;
+  font-weight: bold;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.end-review-button:hover {
+  background-color: #d66a4a;
+}

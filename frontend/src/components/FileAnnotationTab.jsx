@@ -3,12 +3,15 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import IngestionView from './IngestionView';
 import AnnotationWorkspace from './AnnotationWorkspace';
+import ReviewSessionControls from './ReviewSessionControls'; // --- NEW: Import new component ---
 
 function FileAnnotationTab({ jumpToData }) {
   const [collections, setCollections] = useState([]);
   const [selectedCollection, setSelectedCollection] = useState('');
   const [view, setView] = useState('ingestion');
-  const [sourceEvent, setSourceEvent] = useState(null);
+  
+  // --- NEW: State for the active review session ---
+  const [activeReviewEvent, setActiveReviewEvent] = useState(null);
 
   const fetchCollections = async () => {
     try {
@@ -31,11 +34,12 @@ function FileAnnotationTab({ jumpToData }) {
     fetchCollections();
   }, []);
 
+  // --- MODIFIED: This now starts the review session ---
   useEffect(() => {
     if (jumpToData) {
       setView('workspace');
       setSelectedCollection(jumpToData.collection);
-      setSourceEvent(jumpToData.sourceEvent);
+      setActiveReviewEvent(jumpToData.sourceEvent); // Start the session
     }
   }, [jumpToData]);
 
@@ -45,12 +49,30 @@ function FileAnnotationTab({ jumpToData }) {
     setView('workspace');
   };
 
-  const handleReviewComplete = () => {
-      setSourceEvent(null);
-  }
+  // --- NEW: Handler to end the review session ---
+  const handleEndReview = async () => {
+    if (!activeReviewEvent) return;
+    try {
+      // Mark the original manual event as 'reviewed'
+      await axios.put(`/api/events/${activeReviewEvent.id}/status`, { status: 'reviewed' });
+      // Clear the session state
+      setActiveReviewEvent(null);
+    } catch (error) {
+      alert(`Error: Could not mark event ${activeReviewEvent.id} as reviewed.`);
+      console.error(error);
+    }
+  };
 
   return (
     <div style={{ width: '100%' }}>
+      {/* --- NEW: Conditionally render the session controls --- */}
+      {activeReviewEvent && (
+        <ReviewSessionControls 
+          sourceEvent={activeReviewEvent}
+          onEndReview={handleEndReview}
+        />
+      )}
+      
       {view === 'ingestion' && <IngestionView onIngestionComplete={handleIngestionComplete} />}
       {view === 'workspace' && (
         <AnnotationWorkspace
@@ -58,8 +80,8 @@ function FileAnnotationTab({ jumpToData }) {
           selectedCollection={selectedCollection}
           setSelectedCollection={setSelectedCollection}
           jumpToData={jumpToData}
-          sourceEvent={sourceEvent}
-          onReviewComplete={handleReviewComplete}
+          // --- MODIFIED: Pass the active event, not a one-time source event ---
+          activeReviewEvent={activeReviewEvent} 
         />
       )}
       <button onClick={() => setView(view === 'ingestion' ? 'workspace' : 'ingestion')} style={{marginTop: '20px'}}>

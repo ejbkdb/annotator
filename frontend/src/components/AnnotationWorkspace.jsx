@@ -10,7 +10,8 @@ import { parseISOString, formatForInput } from '../utils/time';
 
 const DURATION_OPTIONS = [5, 10, 20, 50, 100];
 
-function AnnotationWorkspace({ collections, selectedCollection, setSelectedCollection, jumpToData, sourceEvent, onReviewComplete }) {
+// --- MODIFIED: Removed props that are now managed by the parent ---
+function AnnotationWorkspace({ collections, selectedCollection, setSelectedCollection, jumpToData, activeReviewEvent }) {
   const [events, setEvents] = useState([]);
   const [vehicleConfigs, setVehicleConfigs] = useState([]);
   const [availableRange, setAvailableRange] = useState({ start: null, end: null });
@@ -113,20 +114,18 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
       
       setSelectionRange({ start: finalStart, end: finalEnd });
       setIsSelecting(false);
-      // This part is already correct and inherits the data
+      
+      // --- MODIFIED: Always inherit from the active review event if it exists ---
       setActiveAnnotation({ 
-          vehicle_type: sourceEvent?.vehicle_type || '', 
-          vehicle_identifier: sourceEvent?.vehicle_identifier || '', 
-          annotator_notes: sourceEvent?.annotator_notes || '' 
+          vehicle_type: activeReviewEvent?.vehicle_type || '', 
+          vehicle_identifier: activeReviewEvent?.vehicle_identifier || '', 
+          annotator_notes: activeReviewEvent?.annotator_notes || '' 
       });
     }
   };
 
   const cancelSelection = () => {
     setIsSelecting(false); setSelectionRange(null); setActiveAnnotation(null);
-    if (sourceEvent) {
-        onReviewComplete();
-    }
   };
 
   const handlePlayAudio = async () => {
@@ -163,13 +162,12 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         return;
     }
     
-    // Find the displayName from the ID to save in the refined event
     const vehicleConfig = vehicleConfigs.find(v => v.id === activeAnnotation.vehicle_type);
     const vehicleDisplayName = vehicleConfig ? vehicleConfig.displayName : activeAnnotation.vehicle_type;
 
     const eventPayload = {
         ...activeAnnotation,
-        vehicle_type: vehicleDisplayName, // Save the human-readable name
+        vehicle_type: vehicleDisplayName,
         start_timestamp: selectionRange.start.toISOString(),
         end_timestamp: selectionRange.end.toISOString(),
         direction: 'N/A',
@@ -180,10 +178,7 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         const response = await axios.post('/api/events', eventPayload);
         setEvents(prev => [response.data, ...prev]);
         
-        if (sourceEvent) {
-            await axios.put(`/api/events/${sourceEvent.id}/status`, { status: 'reviewed' });
-            onReviewComplete();
-        }
+        // --- REMOVED: The logic to update status is now handled by the "Finish Review" button ---
         
         cancelSelection();
     } catch (err) { setError('Failed to save annotation.'); }
@@ -194,7 +189,7 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     
     const hopMs = durationSecs * 1000;
     const currentMs = startTime.getTime();
-    let newMs = direction === 'next' ? currentMs + hopMs : currentMs - hopMs;
+    let newMs = direction === 'next' ? currentMs - hopMs : currentMs - hopMs;
     
     const availableStartMs = availableRange.start.getTime();
     const availableEndMs = availableRange.end.getTime();
@@ -215,12 +210,6 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
 
   return (
     <div className="workspace-container">
-        {sourceEvent && (
-            <div className="review-context-banner">
-            Reviewing manual event: <strong>{sourceEvent.vehicle_type}</strong> from {new Date(sourceEvent.start_timestamp).toLocaleString()}. 
-            Create a refined annotation below.
-            </div>
-        )}
       <div className="workspace-controls">
         <label htmlFor="collection-select">Select Data Collection:</label>
         <select id="collection-select" value={selectedCollection} onChange={(e) => setSelectedCollection(e.target.value)}>
@@ -306,7 +295,6 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
             onChange={e => setActiveAnnotation(p => ({...p, vehicle_type: e.target.value}))}
           >
             <option value="">-- Select Vehicle --</option>
-            {/* --- FIX: The 'value' attribute now uses the vehicle ID --- */}
             {vehicleConfigs.map(v => <option key={v.id} value={v.id}>{v.displayName}</option>)}
           </select>
           <input 

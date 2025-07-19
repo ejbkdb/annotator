@@ -1,32 +1,42 @@
 [
     {
-      "id": "car",
-      "displayName": "Car",
+      "id": "F550",
+      "displayName": "F550",
       "category": "Ground"
     },
     {
-      "id": "atv",
-      "displayName": "ATV",
+      "id": "2.5Ton",
+      "displayName": "2.5 Ton Truck",
       "category": "Ground"
     },
     {
-      "id": "truck_suv",
-      "displayName": "Truck / SUV",
+      "id": "5ton",
+      "displayName": "5ton",
       "category": "Ground"
     },
     {
-      "id": "fixed_wing_drone",
-      "displayName": "Fixed-Wing Drone",
+      "id": "kubota",
+      "displayName": "kubota",
+      "category": "Ground"
+    },
+    {
+      "id": "gator",
+      "displayName": "gator",
+      "category": "Ground"
+    },
+    {
+      "id": "pantsir",
+      "displayName": "pantsir",
+      "category": "Ground"
+    },
+    {
+      "id": "miniHelo",
+      "displayName": "miniHelo",
       "category": "Air"
-    },
+    },    
     {
       "id": "quadcopter",
-      "displayName": "Quadcopter",
-      "category": "Air"
-    },
-    {
-      "id": "airplane",
-      "displayName": "Airplane",
+      "displayName": "quadcopter",
       "category": "Air"
     },
     {

@@ -1,7 +1,7 @@
 // frontend/src/App.jsx
 import React, { useState } from 'react';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
-import 'react-tabs/style/react-tabs.css'; // Default styles
+import 'react-tabs/style/react-tabs.css';
 
 import RealtimeAnnotationTab from './components/RealtimeAnnotationTab';
 import FileAnnotationTab from './components/FileAnnotationTab';
@@ -15,11 +15,18 @@ function App() {
     setJumpToData(data);
     setTabIndex(1); // Switch to the "File-based Annotation" tab
   };
+  
+  // --- MODIFIED: Clear jump data when user navigates away ---
+  const handleTabSelect = (index) => {
+    if (index !== 1) {
+        setJumpToData(null);
+    }
+    setTabIndex(index);
+  }
 
   return (
     <div className="main-container">
-      {/* --- CHANGE: The main header element has been removed --- */}
-      <Tabs className="content-tabs" selectedIndex={tabIndex} onSelect={(index) => setTabIndex(index)}>
+      <Tabs className="content-tabs" selectedIndex={tabIndex} onSelect={handleTabSelect}>
         <TabList>
           <Tab>Real-time Annotation</Tab>
           <Tab>File-based Annotation</Tab>
