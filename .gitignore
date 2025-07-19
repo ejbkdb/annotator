@@ -4,3 +4,4 @@ t.txt
 *.db
 data/
 *questdb_data
+questdb_data/
