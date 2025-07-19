@@ -6,13 +6,11 @@ import TimeSeriesChart from './TimeSeriesChart';
 import EventLog from './EventLog';
 import './AnnotationWorkspace.css';
 
-// --- NEW: Import the modular time utilities ---
-// This assumes you have created the file 'frontend/src/utils/time.js'
 import { parseISOString, formatForInput } from '../utils/time';
 
 const DURATION_OPTIONS = [5, 10, 20, 50, 100];
 
-function AnnotationWorkspace({ collections, selectedCollection, setSelectedCollection }) {
+function AnnotationWorkspace({ collections, selectedCollection, setSelectedCollection, jumpToData, sourceEvent, onReviewComplete }) {
   const [events, setEvents] = useState([]);
   const [vehicleConfigs, setVehicleConfigs] = useState([]);
   const [availableRange, setAvailableRange] = useState({ start: null, end: null });
@@ -25,19 +23,23 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
   const [chartData, setChartData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // State for the annotation workflow
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectionRange, setSelectionRange] = useState(null);
   const [activeAnnotation, setActiveAnnotation] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef(new Audio());
 
-  // Fetch vehicle configs on component mount
+  useEffect(() => {
+    if (jumpToData) {
+      setStartTime(jumpToData.startTime);
+      setDurationSecs(jumpToData.durationSecs);
+    }
+  }, [jumpToData]);
+
   useEffect(() => {
     axios.get('/api/config/vehicles').then(res => setVehicleConfigs(res.data));
   }, []);
 
-  // Fetch initial collection info when the selected collection changes
   useEffect(() => {
     if (!selectedCollection) {
       setStartTime(null); 
@@ -51,12 +53,13 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         const response = await axios.get(`/api/audio/collections/${selectedCollection}/info`);
         const { start, end } = response.data.time_range;
         
-        // Use the modular utility to correctly parse API strings as UTC Dates
         const startUTC = parseISOString(start);
         const endUTC = parseISOString(end);
         
         setAvailableRange({ start: startUTC, end: endUTC });
-        setStartTime(startUTC);
+        if (!jumpToData) {
+            setStartTime(startUTC);
+        }
       } catch (err) {
         const errorMsg = err.response?.data?.detail || err.message;
         setError(`Could not fetch time range for '${selectedCollection}': ${errorMsg}`);
@@ -68,11 +71,9 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     setEvents([]);
   }, [selectedCollection]);
 
-  // Fetch waveform data whenever the view (time, duration, etc.) changes
   useEffect(() => {
     if (!selectedCollection || !startTime) return;
     
-    // Standard Date objects handle UTC math correctly
     const endTime = new Date(startTime.getTime() + durationSecs * 1000);
     
     const fetchWaveformData = async () => {
@@ -81,7 +82,6 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         const response = await axios.get('/api/audio/waveform', {
           params: {
             collection: selectedCollection,
-            // .toISOString() is UTC-safe and produces the required 'Z' format
             start: startTime.toISOString(),
             end: endTime.toISOString(),
             points: points,
@@ -97,7 +97,6 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
   }, [selectedCollection, startTime, durationSecs, points]);
 
   const handleChartClick = (timestamp) => {
-    // The timestamp from the chart is already a Z-suffixed ISO string
     const clickedDate = parseISOString(timestamp);
 
     if (!isSelecting) {
@@ -114,7 +113,11 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
       
       setSelectionRange({ start: finalStart, end: finalEnd });
       setIsSelecting(false);
-      setActiveAnnotation({ vehicle_type: '', vehicle_identifier: '', annotator_notes: '' });
+      setActiveAnnotation({ 
+          vehicle_type: sourceEvent?.vehicle_type || '', 
+          vehicle_identifier: sourceEvent?.vehicle_identifier || '', 
+          annotator_notes: sourceEvent?.annotator_notes || '' 
+      });
     }
   };
 
@@ -160,12 +163,19 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         ...activeAnnotation,
         start_timestamp: selectionRange.start.toISOString(),
         end_timestamp: selectionRange.end.toISOString(),
-        direction: 'N/A' // Defaulting direction
+        direction: 'N/A',
+        status: 'refined'
     };
     
     try {
         const response = await axios.post('/api/events', eventPayload);
         setEvents(prev => [response.data, ...prev]);
+        
+        if (sourceEvent) {
+            await axios.put(`/api/events/${sourceEvent.id}/status`, { status: 'reviewed' });
+            onReviewComplete();
+        }
+        
         cancelSelection();
     } catch (err) { setError('Failed to save annotation.'); }
   };
@@ -180,7 +190,6 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     const availableStartMs = availableRange.start.getTime();
     const availableEndMs = availableRange.end.getTime();
     
-    // Constrain the new start time to be within the available data range
     if (newMs < availableStartMs) newMs = availableStartMs;
     if (newMs >= (availableEndMs - hopMs)) newMs = availableEndMs - hopMs;
     
@@ -191,14 +200,18 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     const inputValue = e.target.value;
     if (!inputValue) return;
     
-    // A datetime-local input produces a string like "YYYY-MM-DDTHH:mm:ss".
-    // Append 'Z' to explicitly tell the Date constructor to parse it as UTC.
     const userDate = new Date(inputValue + 'Z');
     setStartTime(userDate);
   };
 
   return (
     <div className="workspace-container">
+        {sourceEvent && (
+            <div className="review-context-banner">
+            Reviewing manual event: <strong>{sourceEvent.vehicle_type}</strong> from {new Date(sourceEvent.start_timestamp).toLocaleString()}. 
+            Create a refined annotation below.
+            </div>
+        )}
       <div className="workspace-controls">
         <label htmlFor="collection-select">Select Data Collection:</label>
         <select id="collection-select" value={selectedCollection} onChange={(e) => setSelectedCollection(e.target.value)}>
@@ -232,7 +245,6 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
               <input 
                 type="datetime-local" 
                 id="start-time" 
-                // Use the utility to correctly format the date for the input
                 value={formatForInput(startTime)} 
                 onChange={handleTimeInputChange}
                 step="1"

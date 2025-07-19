@@ -3,19 +3,16 @@ import uuid
 import json
 import os
 import asyncio
-from datetime import datetime
-from typing import List
+from datetime import datetime, timezone
+from typing import List, Optional
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Response, status, APIRouter, File, UploadFile, Form, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Response, status, APIRouter, File, UploadFile, Form, BackgroundTasks, Query
+from fastapi.responses import JSONResponse
 
 from fastapi.middleware.cors import CORSMiddleware
-from .models import Event, EventPayload, VehicleConfig
+from .models import Event, EventPayload, VehicleConfig, EventStatusUpdate 
 from backend import database
-
-# --- THIS IS THE ONLY CHANGE IN THIS FILE ---
-# import influx_client 
-from backend import questdb_client # Direct replacement, no alias.
-# --- END OF CHANGE ---
+from backend import questdb_client
 
 import io
 import wave
@@ -40,6 +37,7 @@ router_status = APIRouter(tags=["Status"])
 router_config = APIRouter(tags=["Configuration"])
 router_events = APIRouter(tags=["Events"])
 router_audio = APIRouter(tags=["Audio & Timeseries"])
+router_export = APIRouter(tags=["Export"])
 
 @router_config.get("/api/config/vehicles", response_model=List[VehicleConfig])
 async def get_vehicle_config():
@@ -57,7 +55,6 @@ async def process_and_ingest_files(collection_name: str, filenames: List[str]):
         if not os.path.exists(file_path):
             failed_files += 1; continue
         try:
-            # Calls the new questdb_client module
             await questdb_client.ingest_wav_data_async(file_path, collection_name)
             successful_files += 1
         except Exception as e:
@@ -95,7 +92,7 @@ async def get_waveform_data(collection: str, start: str, end: str, points: int =
 @router_status.get("/api/health")
 async def health_check(): return {"status": "ok"}
 @router_events.get("/api/events", response_model=List[Event])
-async def get_all_events(): return database.get_all_events_from_db()
+async def get_all_events(status: Optional[str] = None): return database.get_all_events_from_db(status=status)
 @router_events.post("/api/events", response_model=Event, status_code=201)
 async def create_event(payload: EventPayload):
     event = Event(id=str(uuid.uuid4()), **payload.dict())
@@ -125,7 +122,85 @@ async def get_raw_audio_clip(collection: str, start: str, end: str):
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="audio/wav")
 
+@router_events.put("/api/events/{event_id}/status", status_code=status.HTTP_204_NO_CONTENT)
+async def update_event_status(event_id: str, payload: EventStatusUpdate):
+    if not database.update_event_status_in_db(event_id, payload.status):
+        raise HTTPException(status_code=404, detail="Event not found or status could not be updated.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+@router_events.get("/api/events/{event_id}/suggest-collection")
+async def suggest_collection_for_event(event_id: str):
+    event_dict = database.get_event_by_id_from_db(event_id)
+    if not event_dict:
+        raise HTTPException(status_code=404, detail="Event not found.")
+    
+    event_start_time = datetime.fromisoformat(event_dict['start_timestamp'])
+    
+    collections = questdb_client.get_collections()
+    
+    for collection in collections:
+        time_range = questdb_client.get_collection_time_range(collection)
+        if time_range:
+            range_start = datetime.fromisoformat(time_range['start'].replace("Z", "+00:00"))
+            range_end = datetime.fromisoformat(time_range['end'].replace("Z", "+00:00"))
+            if range_start <= event_start_time <= range_end:
+                return {"suggested_collection": collection}
+
+    return {"suggested_collection": None}
+
+@router_export.get("/api/export/dataset")
+async def export_dataset(start_date: Optional[str] = None, end_date: Optional[str] = None, vehicle_types: Optional[List[str]] = Query(None)):
+    """
+    Export refined events as an ML-ready dataset in JSON format.
+    Filters by date and vehicle types.
+    """
+    refined_events = database.get_all_events_from_db(status='refined')
+    
+    filtered_events = []
+    for event in refined_events:
+        event_start = datetime.fromisoformat(event['start_timestamp'])
+        
+        if start_date and event_start < datetime.fromisoformat(start_date):
+            continue
+        if end_date and event_start > datetime.fromisoformat(end_date):
+            continue
+        if vehicle_types and event['vehicle_type'] not in vehicle_types:
+            continue
+        filtered_events.append(event)
+
+    annotations = []
+    category_stats = {}
+    for event in filtered_events:
+        start_ts = datetime.fromisoformat(event['start_timestamp'])
+        end_ts = datetime.fromisoformat(event['end_timestamp'])
+        duration = (end_ts - start_ts).total_seconds()
+        annotations.append({
+            "id": event['id'], "vehicle_type": event['vehicle_type'],
+            "start_timestamp": event['start_timestamp'], "end_timestamp": event['end_timestamp'],
+            "duration_seconds": round(duration, 3), "vehicle_identifier": event.get('vehicle_identifier'),
+            "direction": event.get('direction'), "notes": event.get('annotator_notes')
+        })
+        cat = event['vehicle_type']
+        if cat not in category_stats:
+            category_stats[cat] = {"count": 0, "total_duration": 0}
+        category_stats[cat]["count"] += 1
+        category_stats[cat]["total_duration"] += duration
+
+    for cat, data in category_stats.items():
+        avg_duration = data['total_duration'] / data['count'] if data['count'] > 0 else 0
+        category_stats[cat]['avg_duration'] = round(avg_duration, 3)
+
+    dataset_metadata = {
+        "generated_at": datetime.now(timezone.utc).isoformat(), "total_events": len(annotations),
+        "date_range": {"start": start_date, "end": end_date}, "categories": list(category_stats.keys())
+    }
+    final_export = {
+        "dataset_metadata": dataset_metadata, "annotations": annotations, "category_stats": category_stats
+    }
+    return JSONResponse(content=final_export)
+
 app.include_router(router_status)
 app.include_router(router_config)
 app.include_router(router_events)
 app.include_router(router_audio)
+app.include_router(router_export)

@@ -7,8 +7,24 @@ from multiprocessing import Pool, cpu_count
 from backend import questdb_client
 
 # --- CONFIGURE YOUR BULK INGESTION HERE ---
-FOLDER_PATH = "/home/eborcherding/Documents/florida/moth/"
-COLLECTION_NAME = "hellsbay1"
+FOLDER_PATH = "/home/pbelous/Documents/regular_1/6131-3063/20250716/"
+COLLECTION_NAME = "L1_moth_no_foam"
+
+FOLDER_PATH = "/home/pbelous/Documents/regular_2/3031-3063/20250716/"
+COLLECTION_NAME = "L2_moth_no_foam"
+
+FOLDER_PATH = "/home/pbelous/Documents/regular_3/3031-3063/20250716/"
+COLLECTION_NAME = "L3_moth_no_foam"
+
+FOLDER_PATH = "/home/pbelous/Documents/foam_1/6431-3063/20250716/"
+COLLECTION_NAME = "L1_moth_foam"
+
+FOLDER_PATH = "/home/pbelous/Documents/foam_2/6231-3063/20250716/"
+COLLECTION_NAME = "L2_moth_foam"
+
+FOLDER_PATH = "/home/pbelous/Documents/foam_3/9016-4EF8/20250716/"
+COLLECTION_NAME = "L3_moth_foam"
+
 # File pattern - change if needed (e.g., "*.WAV", "*.wav", "**/*.wav" for recursive)
 FILE_PATTERN = "*.WAV"
 # --------------------------------

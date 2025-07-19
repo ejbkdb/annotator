@@ -4,10 +4,11 @@ import axios from 'axios';
 import IngestionView from './IngestionView';
 import AnnotationWorkspace from './AnnotationWorkspace';
 
-function FileAnnotationTab() {
+function FileAnnotationTab({ jumpToData }) {
   const [collections, setCollections] = useState([]);
   const [selectedCollection, setSelectedCollection] = useState('');
-  const [view, setView] = useState('ingestion'); // 'ingestion' or 'workspace'
+  const [view, setView] = useState('ingestion');
+  const [sourceEvent, setSourceEvent] = useState(null);
 
   const fetchCollections = async () => {
     try {
@@ -30,11 +31,23 @@ function FileAnnotationTab() {
     fetchCollections();
   }, []);
 
+  useEffect(() => {
+    if (jumpToData) {
+      setView('workspace');
+      setSelectedCollection(jumpToData.collection);
+      setSourceEvent(jumpToData.sourceEvent);
+    }
+  }, [jumpToData]);
+
   const handleIngestionComplete = (newCollectionName) => {
     fetchCollections();
     setSelectedCollection(newCollectionName);
     setView('workspace');
   };
+
+  const handleReviewComplete = () => {
+      setSourceEvent(null);
+  }
 
   return (
     <div style={{ width: '100%' }}>
@@ -44,6 +57,9 @@ function FileAnnotationTab() {
           collections={collections}
           selectedCollection={selectedCollection}
           setSelectedCollection={setSelectedCollection}
+          jumpToData={jumpToData}
+          sourceEvent={sourceEvent}
+          onReviewComplete={handleReviewComplete}
         />
       )}
       <button onClick={() => setView(view === 'ingestion' ? 'workspace' : 'ingestion')} style={{marginTop: '20px'}}>
