@@ -1,5 +1,4 @@
 # backend/models.py
-# --- FIX: Added 'Field' to the import statement ---
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
@@ -20,8 +19,24 @@ class VehicleConfig(BaseModel):
     id: str
     displayName: str
     category: str
+    subclass: str
 
 class EventStatusUpdate(BaseModel):
     status: str = Field(..., pattern=r"^(manual|refined|reviewed)$")
 
-# backend/models.py
+# --- MODIFIED: Add source_collection field ---
+class RefinedAnnotationPayload(BaseModel):
+    parent_event_id: str
+    source_collection: str
+    start_timestamp: datetime
+    end_timestamp: datetime
+    vehicle_type: str
+    location: str = Field(..., pattern=r"^(tarmac|fastpass|jungle)$")
+    action: str = Field(..., pattern=r"^(driveby|rev|idle|flying|hover)$")
+    direction: str = Field(..., pattern=r"^(towards_de|towards_103|na)$")
+    annotator_notes: Optional[str] = None
+
+# --- MODIFIED: Add source_collection field ---
+class RefinedAnnotation(RefinedAnnotationPayload):
+    id: str
+    vehicle_subclass: str

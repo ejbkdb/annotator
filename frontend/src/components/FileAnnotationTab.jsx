@@ -5,6 +5,9 @@ import IngestionView from './IngestionView';
 import AnnotationWorkspace from './AnnotationWorkspace';
 import ReviewSessionControls from './ReviewSessionControls';
 
+// --- NEW: Define the preferred default collection here ---
+const PREFERRED_DEFAULT_COLLECTION = 'l1_moth_no_foam';
+
 function FileAnnotationTab({ jumpToData }) {
   const [collections, setCollections] = useState([]);
   const [selectedCollection, setSelectedCollection] = useState('');
@@ -15,11 +18,20 @@ function FileAnnotationTab({ jumpToData }) {
   const fetchCollections = async () => {
     try {
       const response = await axios.get('/api/audio/collections');
-      setCollections(response.data);
-      if (response.data.length > 0) {
+      const fetchedCollections = response.data;
+      setCollections(fetchedCollections);
+
+      if (fetchedCollections.length > 0) {
         setView('workspace');
+        // --- MODIFIED: Logic to set the selected collection ---
         if (!selectedCollection) {
-          setSelectedCollection(response.data[0]);
+          // Check if the preferred default exists in the fetched list
+          if (fetchedCollections.includes(PREFERRED_DEFAULT_COLLECTION)) {
+            setSelectedCollection(PREFERRED_DEFAULT_COLLECTION);
+          } else {
+            // Fallback to the first item if the preferred one isn't found
+            setSelectedCollection(fetchedCollections[0]);
+          }
         }
       } else {
         setView('ingestion');
@@ -50,6 +62,9 @@ function FileAnnotationTab({ jumpToData }) {
   const handleEndReview = async () => {
     if (!activeReviewEvent) return;
     try {
+      // This logic should be reviewed. If all children are created, the parent is already 'reviewed'.
+      // This button might be better as just "End Session" that clears the state.
+      // For now, we'll leave the original PUT request but it might be redundant.
       await axios.put(`/api/events/${activeReviewEvent.id}/status`, { status: 'reviewed' });
       setActiveReviewEvent(null);
     } catch (error) {
@@ -59,7 +74,6 @@ function FileAnnotationTab({ jumpToData }) {
   };
 
   return (
-    // --- MODIFIED: Added height: 100% to allow child to fill the space ---
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {activeReviewEvent && (
         <ReviewSessionControls 

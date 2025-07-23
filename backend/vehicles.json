@@ -2,46 +2,55 @@
     {
       "id": "F550 Dump",
       "displayName": "F550 Dump",
-      "category": "Ground"
+      "category": "Ground",
+      "subclass": "medium_vehicle"
     },
     {
       "id": "2.5 Ton Truck",
       "displayName": "2.5 Ton Truck",
-      "category": "Ground"
+      "category": "Ground",
+      "subclass": "heavy_vehicle"
     },
     {
       "id": "5 Ton Truck",
       "displayName": "5 Ton Truck",
-      "category": "Ground"
+      "category": "Ground",
+      "subclass": "heavy_vehicle"
     },
     {
       "id": "kubota",
-      "displayName": "kubota",
-      "category": "Ground"
+      "displayName": "Kubota",
+      "category": "Ground",
+      "subclass": "extra_light_vehicle"
     },
     {
       "id": "gator",
-      "displayName": "gator",
-      "category": "Ground"
+      "displayName": "Gator",
+      "category": "Ground",
+      "subclass": "extra_light_vehicle"
     },
     {
       "id": "Pantsir",
-      "displayName": "pantsir",
-      "category": "Ground"
+      "displayName": "Pantsir",
+      "category": "Ground",
+      "subclass": "heavy_vehicle"
     },
     {
       "id": "mini helicopter",
-      "displayName": "mini helicopter",
-      "category": "Air"
+      "displayName": "Mini Helicopter",
+      "category": "Air",
+      "subclass": "rotary"
     },    
     {
       "id": "quadcopter",
-      "displayName": "quadcopter",
-      "category": "Air"
+      "displayName": "Quadcopter",
+      "category": "Air",
+      "subclass": "rotary"
     },
     {
       "id": "other",
       "displayName": "Other...",
-      "category": "Special"
+      "category": "Special",
+      "subclass": "unknown"
     }
-  ]
+]
