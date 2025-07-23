@@ -8,7 +8,7 @@ function ReviewTab({ onJumpTo }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   // --- NEW: State to manage the sort order ---
-  const [sortOrder, setSortOrder] = useState('desc'); // 'desc' for newest first, 'asc' for oldest first
+  const [sortOrder, setSortOrder] = useState('asc'); // 'desc' for newest first, 'asc' for oldest first
 
   const fetchManualEvents = async () => {
     try {

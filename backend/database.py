@@ -3,7 +3,7 @@ import sqlite3
 from .models import Event
 from typing import Optional
 
-DATABASE_FILE = "/home/eborcherding/Documents/annotator/annotator/test_range.db"
+DATABASE_FILE = "/home/eborcherding/Documents/annotator/test_range.db"
 
 def init_db():
     conn = sqlite3.connect(DATABASE_FILE)

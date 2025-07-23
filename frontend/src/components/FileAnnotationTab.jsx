@@ -3,14 +3,13 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import IngestionView from './IngestionView';
 import AnnotationWorkspace from './AnnotationWorkspace';
-import ReviewSessionControls from './ReviewSessionControls'; // --- NEW: Import new component ---
+import ReviewSessionControls from './ReviewSessionControls';
 
 function FileAnnotationTab({ jumpToData }) {
   const [collections, setCollections] = useState([]);
   const [selectedCollection, setSelectedCollection] = useState('');
   const [view, setView] = useState('ingestion');
   
-  // --- NEW: State for the active review session ---
   const [activeReviewEvent, setActiveReviewEvent] = useState(null);
 
   const fetchCollections = async () => {
@@ -34,12 +33,11 @@ function FileAnnotationTab({ jumpToData }) {
     fetchCollections();
   }, []);
 
-  // --- MODIFIED: This now starts the review session ---
   useEffect(() => {
     if (jumpToData) {
       setView('workspace');
       setSelectedCollection(jumpToData.collection);
-      setActiveReviewEvent(jumpToData.sourceEvent); // Start the session
+      setActiveReviewEvent(jumpToData.sourceEvent);
     }
   }, [jumpToData]);
 
@@ -49,13 +47,10 @@ function FileAnnotationTab({ jumpToData }) {
     setView('workspace');
   };
 
-  // --- NEW: Handler to end the review session ---
   const handleEndReview = async () => {
     if (!activeReviewEvent) return;
     try {
-      // Mark the original manual event as 'reviewed'
       await axios.put(`/api/events/${activeReviewEvent.id}/status`, { status: 'reviewed' });
-      // Clear the session state
       setActiveReviewEvent(null);
     } catch (error) {
       alert(`Error: Could not mark event ${activeReviewEvent.id} as reviewed.`);
@@ -64,8 +59,8 @@ function FileAnnotationTab({ jumpToData }) {
   };
 
   return (
-    <div style={{ width: '100%' }}>
-      {/* --- NEW: Conditionally render the session controls --- */}
+    // --- MODIFIED: Added height: 100% to allow child to fill the space ---
+    <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       {activeReviewEvent && (
         <ReviewSessionControls 
           sourceEvent={activeReviewEvent}
@@ -80,11 +75,10 @@ function FileAnnotationTab({ jumpToData }) {
           selectedCollection={selectedCollection}
           setSelectedCollection={setSelectedCollection}
           jumpToData={jumpToData}
-          // --- MODIFIED: Pass the active event, not a one-time source event ---
           activeReviewEvent={activeReviewEvent} 
         />
       )}
-      <button onClick={() => setView(view === 'ingestion' ? 'workspace' : 'ingestion')} style={{marginTop: '20px'}}>
+      <button onClick={() => setView(view === 'ingestion' ? 'workspace' : 'ingestion')} style={{marginTop: '20px', flexShrink: 0}}>
         {view === 'ingestion' ? 'Go to Workspace' : 'Go to Ingestion'}
       </button>
     </div>

@@ -1,17 +1,17 @@
 [
     {
-      "id": "F550",
-      "displayName": "F550",
+      "id": "F550 Dump",
+      "displayName": "F550 Dump",
       "category": "Ground"
     },
     {
-      "id": "2.5Ton",
+      "id": "2.5 Ton Truck",
       "displayName": "2.5 Ton Truck",
       "category": "Ground"
     },
     {
-      "id": "5ton",
-      "displayName": "5ton",
+      "id": "5 Ton Truck",
+      "displayName": "5 Ton Truck",
       "category": "Ground"
     },
     {
@@ -25,13 +25,13 @@
       "category": "Ground"
     },
     {
-      "id": "pantsir",
+      "id": "Pantsir",
       "displayName": "pantsir",
       "category": "Ground"
     },
     {
-      "id": "miniHelo",
-      "displayName": "miniHelo",
+      "id": "mini helicopter",
+      "displayName": "mini helicopter",
       "category": "Air"
     },    
     {

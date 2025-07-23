@@ -5,3 +5,6 @@ t.txt
 data/
 *questdb_data
 questdb_data/
+*.csv
+dist/
+event_clips/

@@ -10,7 +10,6 @@ import { parseISOString, formatForInput } from '../utils/time';
 
 const DURATION_OPTIONS = [5, 10, 20, 50, 100];
 
-// --- MODIFIED: Removed props that are now managed by the parent ---
 function AnnotationWorkspace({ collections, selectedCollection, setSelectedCollection, jumpToData, activeReviewEvent }) {
   const [events, setEvents] = useState([]);
   const [vehicleConfigs, setVehicleConfigs] = useState([]);
@@ -115,7 +114,6 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
       setSelectionRange({ start: finalStart, end: finalEnd });
       setIsSelecting(false);
       
-      // --- MODIFIED: Always inherit from the active review event if it exists ---
       setActiveAnnotation({ 
           vehicle_type: activeReviewEvent?.vehicle_type || '', 
           vehicle_identifier: activeReviewEvent?.vehicle_identifier || '', 
@@ -177,9 +175,6 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     try {
         const response = await axios.post('/api/events', eventPayload);
         setEvents(prev => [response.data, ...prev]);
-        
-        // --- REMOVED: The logic to update status is now handled by the "Finish Review" button ---
-        
         cancelSelection();
     } catch (err) { setError('Failed to save annotation.'); }
   };
@@ -189,7 +184,7 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     
     const hopMs = durationSecs * 1000;
     const currentMs = startTime.getTime();
-    let newMs = direction === 'next' ? currentMs - hopMs : currentMs - hopMs;
+    let newMs = direction === 'next' ? currentMs + hopMs : currentMs - hopMs;
     
     const availableStartMs = availableRange.start.getTime();
     const availableEndMs = availableRange.end.getTime();
@@ -318,7 +313,8 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
         </div>
       )}
 
-      <div className="event-log-container" style={{flex: '1', width: '100%', marginTop: '20px'}}>
+      {/* --- MODIFIED: Removed inline style, will be handled by CSS --- */}
+      <div className="event-log-container">
         <EventLog 
           events={events} 
           onDeleteEvent={(id) => setEvents(p => p.filter(e => e.id !== id))} 
