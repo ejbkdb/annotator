@@ -22,6 +22,15 @@ body {
   .form-section textarea { min-height: 80px; resize: vertical; }
   .button-group { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; align-items: center; }
   .button-group button { padding: 10px 15px; border: 1px solid #555; background-color: #3a3f4a; color: white; cursor: pointer; border-radius: 4px; }
+
+  /* --- FIX: ADD THIS SHARED STYLE --- */
+  /* This general rule will apply to the single vehicle annotator and as a base for others. */
+  .button-group button.selected { 
+    background-color: #61dafb; 
+    color: #282c34; 
+    border-color: #61dafb;
+  }
+
   .button-pair { display: flex; gap: 10px; margin-top: 10px; }
   .button-pair button { flex-grow: 1; padding: 12px; }
   .event-log-list { list-style: none; padding: 0; margin: 0; }
@@ -49,7 +58,7 @@ body {
   .convoy-common-form { margin-top: 20px; padding-top: 20px; border-top: 1px solid #444; width: 90%; max-width: 600px; display: flex; flex-direction: column; gap: 15px; }
   .status-complete { color: #2a9d8f; font-weight: bold; }
 
-/* --- CORRECTED STYLES FOR VEHICLE CARD --- */
+/* --- MODIFIED & NEW STYLES FOR VEHICLE CARD --- */
 
 .convoy-vehicle-body {
     display: grid;
@@ -69,18 +78,16 @@ body {
     font-size: 0.9em;
     color: #ccc;
 }
-/* Base style for the action buttons */
+/* Base style for action buttons */
 .vehicle-action-group .button-group button {
-    background-color: #3a3f4a; /* Dark background */
-    border: 2px solid #555;      /* Medium-thick dark border */
+    border: 2px solid #555;
     padding: 8px 14px;
-    color: #ccc;                 /* Muted text color */
 }
-/* THIS IS THE FIX: Highlight selected action button with a border ONLY */
+/* This specific rule will override the general .selected rule for convoy cards. */
 .vehicle-action-group .button-group button.selected {
-    background-color: #3a3f4a; /* Explicitly keep the background dark */
-    border-color: #61dafb;     /* Change border color to highlight */
-    color: #61dafb;           /* Change text color to match */
+    border-color: #61dafb;
+    background-color: #3a3f4a; /* Keep original background */
+    color: #61dafb;
 }
 
 .timer-display.small {
@@ -95,12 +102,12 @@ body {
     grid-column: 3;
 }
 
-/* Styles for the prominent Start/Stop buttons */
+/* Make Start/Stop buttons obvious */
 .button-group .small {
     padding: 10px 20px;
     font-size: 1em;
     font-weight: bold;
-    border: none; /* These buttons are solid, so no border needed */
+    border: none;
 }
 .start-button.small {
     background-color: #2a9d8f;

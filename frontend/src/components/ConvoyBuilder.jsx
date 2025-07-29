@@ -3,7 +3,10 @@ import React, { useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import ConvoyVehicle from './ConvoyVehicle.jsx';
 
-// Custom hook for debouncing
+// --- Standardized List ---
+const DIRECTIONS = ['towards 103', 'towards de', 'clockwise', 'counterclockwise'];
+
+// Custom hook for debouncing (unchanged)
 function useDebounce(value, delay) {
   const [debouncedValue, setDebouncedValue] = useState(value);
   useEffect(() => {
@@ -23,7 +26,7 @@ function ConvoyBuilder({ vehicleConfigs, onEventSaved, setBackendStatus }) {
   const [convoyData, setConvoyData] = useState({
     convoy_number: '',
     convoy_spacing_seconds: '',
-    direction: 'Towards DE',
+    direction: DIRECTIONS[0],
     notes: '',
   });
 
@@ -33,7 +36,6 @@ function ConvoyBuilder({ vehicleConfigs, onEventSaved, setBackendStatus }) {
 
   useEffect(() => {
     if (!activeConvoy) return;
-
     const updateMetadata = async () => {
       try {
         const payload = {
@@ -73,7 +75,7 @@ function ConvoyBuilder({ vehicleConfigs, onEventSaved, setBackendStatus }) {
   const handleFinishConvoy = () => {
     setActiveConvoy(null);
     setVehicles([]);
-    setConvoyData({ convoy_number: '', convoy_spacing_seconds: '', direction: 'Towards DE', notes: '' });
+    setConvoyData({ convoy_number: '', convoy_spacing_seconds: '', direction: DIRECTIONS[0], notes: '' });
   };
 
   const addVehicle = () => {
@@ -95,7 +97,6 @@ function ConvoyBuilder({ vehicleConfigs, onEventSaved, setBackendStatus }) {
         <div className="convoy-common-form">
           <h3>Start a New Convoy</h3>
           <div className="form-section">
-            {/* --- THIS IS THE UX IMPROVEMENT --- */}
             <label>Convoy Name / ID*:</label>
             <input type="text" name="convoy_number" value={convoyData.convoy_number} onChange={handleInputChange} placeholder="e.g., Test 1A, Alpha Group, etc."/>
           </div>
@@ -132,8 +133,7 @@ function ConvoyBuilder({ vehicleConfigs, onEventSaved, setBackendStatus }) {
         <div className="form-section">
           <label>Direction:</label>
           <select name="direction" value={convoyData.direction} onChange={handleInputChange}>
-            <option value="Towards DE">Towards DE</option>
-            <option value="Towards 103">Towards 103</option>
+            {DIRECTIONS.map(dir => <option key={dir} value={dir}>{dir}</option>)}
           </select>
         </div>
         <div className="form-section">
