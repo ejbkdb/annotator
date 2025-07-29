@@ -49,8 +49,11 @@ async def create_event(payload: EventPayload):
         database.save_event_to_db(event)
         file_path = f"data/events/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{event.id}.json"
         with open(file_path, 'w') as f:
-            json.dump(json.loads(event.json()), f, indent=4)
+            # --- FIX: Use Pydantic's .json() method directly with indent ---
+            f.write(event.json(indent=4))
     except Exception as e:
+        # It's helpful to print the error to the console for debugging
+        print(f"Error creating event: {e}")
         raise HTTPException(status_code=500, detail=f"Server error: {e}")
     return event
 

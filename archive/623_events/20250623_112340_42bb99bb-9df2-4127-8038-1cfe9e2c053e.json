@@ -1,0 +1,9 @@
+{
+    "start_timestamp": "2025-06-23T17:23:04.916000+00:00",
+    "end_timestamp": "2025-06-23T17:23:16.610000+00:00",
+    "vehicle_type": "Tractor with mower",
+    "vehicle_identifier": "eric",
+    "direction": "South -> North",
+    "annotator_notes": "tractor driveby, mower in tow, not on",
+    "id": "42bb99bb-9df2-4127-8038-1cfe9e2c053e"
+}

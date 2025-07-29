@@ -1,0 +1,9 @@
+{
+    "start_timestamp": "2025-06-23T16:30:03.432000+00:00",
+    "end_timestamp": "2025-06-23T16:30:06.583000+00:00",
+    "vehicle_type": "truck_suv",
+    "vehicle_identifier": "eric",
+    "direction": "North -> South",
+    "annotator_notes": "vw atlas, driveby",
+    "id": "309e3b06-1e20-4e0f-9280-8d495c55a72a"
+}

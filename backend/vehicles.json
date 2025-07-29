@@ -1,23 +1,28 @@
 [
     {
-      "id": "car",
-      "displayName": "Car",
+      "id": "5 Ton Truck",
+      "displayName": "5 Ton Truck",
       "category": "Ground"
     },
     {
-      "id": "atv",
-      "displayName": "ATV",
+      "id": "2.5 Ton Truck",
+      "displayName": "2.5 Ton Truck",
       "category": "Ground"
     },
     {
-      "id": "truck_suv",
-      "displayName": "Truck / SUV",
+      "id": "Pantsir",
+      "displayName": "Pantsir",
       "category": "Ground"
     },
     {
-      "id": "fixed_wing_drone",
-      "displayName": "Fixed-Wing Drone",
-      "category": "Air"
+      "id": "F550 Dump",
+      "displayName": "F550 Dump",
+      "category": "Ground"
+    },
+    {
+      "id": "kubota",
+      "displayName": "kubota",
+      "category": "Groud"
     },
     {
       "id": "quadcopter",
@@ -25,9 +30,19 @@
       "category": "Air"
     },
     {
-      "id": "airplane",
-      "displayName": "Airplane",
+      "id": "mini helicopter",
+      "displayName": "mini helicopter",
       "category": "Air"
+    },
+    {
+      "id": "f250",
+      "displayName": "f250",
+      "category": "Ground"
+    },
+    {
+      "id": "air cannon",
+      "displayName": "aircannon",
+      "category": "Special"
     },
     {
       "id": "other",

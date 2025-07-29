@@ -1,0 +1,9 @@
+{
+    "start_timestamp": "2025-06-23T15:16:29.354000+00:00",
+    "end_timestamp": "2025-06-23T15:16:38.391000+00:00",
+    "vehicle_type": "truck_suv",
+    "vehicle_identifier": "eric",
+    "direction": "South -> North",
+    "annotator_notes": "gmc yukon",
+    "id": "ff964b7d-a07a-4484-9e1e-cee499b305a5"
+}

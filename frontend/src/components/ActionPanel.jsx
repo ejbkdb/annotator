@@ -47,7 +47,14 @@ function ActionPanel({ vehicleConfigs, onEventSaved, setBackendStatus }) {
     }
   };
 
-  const handleInputChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  // --- FIX: Correctly define the input handler with useCallback ---
+  const handleInputChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value,
+    }));
+  }, []);
 
   const renderContent = () => {
     switch (workflowState) {

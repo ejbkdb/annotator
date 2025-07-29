@@ -1,0 +1,9 @@
+{
+    "start_timestamp": "2025-06-23T15:00:52.851000+00:00",
+    "end_timestamp": "2025-06-23T15:01:01.330000+00:00",
+    "vehicle_type": "human walking",
+    "vehicle_identifier": "eric",
+    "direction": "South -> North",
+    "annotator_notes": "",
+    "id": "1ad35781-795d-49e6-8a81-76957731f02c"
+}
