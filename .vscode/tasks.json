@@ -1,0 +1,61 @@
+// .vscode/tasks.json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run Backend Server",
+      "type": "shell",
+      "command": "uvicorn",
+      "args": [
+        "main:app",
+        "--reload",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/backend"
+      },
+      "problemMatcher": [],
+      "presentation": {
+        "group": "devGroup",
+        "panel": "new",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "Run Frontend Server",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "dev"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "problemMatcher": [
+        "$vite"
+      ],
+      "presentation": {
+        "group": "devGroup",
+        "panel": "new",
+        "reveal": "always"
+      }
+    },
+    {
+      "label": "Run Dev Servers",
+      "dependsOn": [
+        "Run Backend Server",
+        "Run Frontend Server"
+      ],
+      "dependsOrder": "parallel",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

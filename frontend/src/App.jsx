@@ -4,17 +4,18 @@ import axios from 'axios';
 import ActionPanel from './components/ActionPanel.jsx';
 import EventLog from './components/EventLog.jsx';
 import StatusBar from './components/StatusBar.jsx';
+import ConvoyBuilder from './components/ConvoyBuilder.jsx';
 
 function App() {
   const [events, setEvents] = useState([]);
   const [vehicleConfigs, setVehicleConfigs] = useState([]);
   const [backendStatus, setBackendStatus] = useState('disconnected');
   const [lastSaveTime, setLastSaveTime] = useState(null);
+  const [activeTab, setActiveTab] = useState('single');
 
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        // Use Promise.all to fetch in parallel
         const [configRes, eventsRes, healthRes] = await Promise.all([
           axios.get('/api/config/vehicles'),
           axios.get('/api/events'),
@@ -33,9 +34,9 @@ function App() {
   }, []);
 
   const handleEventSaved = (newEvent) => {
-    // Add new event to the top of the list
+    // This function now handles both single events and convoy vehicle events
     setEvents(prevEvents => [newEvent, ...prevEvents]);
-    setLastSaveTime(newEvent.end_timestamp);
+    setLastSaveTime(new Date().toISOString()); // Set save time to now
   };
 
   const handleDeleteEvent = async (eventId) => {
@@ -58,7 +59,23 @@ function App() {
       <header className="header"><h1>Test Range Annotation Tool</h1></header>
       <div className="content-container">
         <div className="action-panel-container">
-          <ActionPanel vehicleConfigs={vehicleConfigs} onEventSaved={handleEventSaved} setBackendStatus={setBackendStatus} />
+          <div className="tab-container">
+            <button className={`tab-button ${activeTab === 'single' ? 'active' : ''}`} onClick={() => setActiveTab('single')}>
+              Single Vehicle
+            </button>
+            <button className={`tab-button ${activeTab === 'convoy' ? 'active' : ''}`} onClick={() => setActiveTab('convoy')}>
+              Convoy Annotator
+            </button>
+          </div>
+          {activeTab === 'single' ? (
+            <ActionPanel vehicleConfigs={vehicleConfigs} onEventSaved={handleEventSaved} setBackendStatus={setBackendStatus} />
+          ) : (
+            <ConvoyBuilder 
+              vehicleConfigs={vehicleConfigs} 
+              onEventSaved={handleEventSaved} // Pass the single event handler
+              setBackendStatus={setBackendStatus} 
+            />
+          )}
         </div>
         <div className="event-log-container">
           <EventLog events={events} onDeleteEvent={handleDeleteEvent} />
@@ -71,4 +88,3 @@ function App() {
   );
 }
 export default App;
-// frontend/src/App.jsx

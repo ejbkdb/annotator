@@ -7,12 +7,12 @@ from typing import List
 
 from fastapi import FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from models import Event, EventPayload, VehicleConfig
+from models import Event, EventPayload, VehicleConfig, Convoy, ConvoyCreationPayload, ConvoyUpdatePayload
 import database
 
 app = FastAPI(title="Test Range Annotation API")
 
-# IMPORTANT: The port 5173 is the default for Vite.
+# Middleware and startup events are unchanged...
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -25,6 +25,8 @@ app.add_middleware(
 async def startup_event():
     database.init_db()
     os.makedirs("data/events", exist_ok=True)
+    os.makedirs("data/convoys", exist_ok=True)
+
 
 @app.get("/api/health", tags=["Status"])
 async def health_check():
@@ -44,43 +46,42 @@ async def get_all_events():
 
 @app.post("/api/events", response_model=Event, status_code=201, tags=["Events"])
 async def create_event(payload: EventPayload):
+    """Creates a single event. Can be a standalone event or linked to a convoy."""
+    # FIX: Reverted to .dict() for Pydantic V1 compatibility
     event = Event(id=str(uuid.uuid4()), **payload.dict())
     try:
         database.save_event_to_db(event)
-        file_path = f"data/events/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{event.id}.json"
-        with open(file_path, 'w') as f:
-            # --- FIX: Use Pydantic's .json() method directly with indent ---
-            f.write(event.json(indent=4))
     except Exception as e:
-        # It's helpful to print the error to the console for debugging
         print(f"Error creating event: {e}")
         raise HTTPException(status_code=500, detail=f"Server error: {e}")
     return event
 
-@app.delete("/api/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Events"])
-async def delete_event(event_id: str):
-    # First, delete from the database
-    if not database.delete_event_from_db(event_id):
-        raise HTTPException(status_code=404, detail=f"Event with id {event_id} not found.")
-
-    # Second, delete the corresponding JSON file.
-    # We must search for it since the creation timestamp isn't stored.
-    event_file_deleted = False
-    events_dir = "data/events"
+@app.post("/api/convoys", response_model=Convoy, status_code=201, tags=["Convoys"])
+async def create_convoy(payload: ConvoyCreationPayload):
+    """Creates a new convoy record and returns its details including the new ID."""
+    new_convoy = Convoy(
+        id=str(uuid.uuid4()),
+        created_at=datetime.now(),
+        # FIX: Reverted to .dict() for Pydantic V1 compatibility
+        **payload.dict()
+    )
     try:
-        for filename in os.listdir(events_dir):
-            if filename.endswith(f"_{event_id}.json"):
-                file_path = os.path.join(events_dir, filename)
-                os.remove(file_path)
-                event_file_deleted = True
-                break
-        if not event_file_deleted:
-            # This is not critical enough to fail the request, but worth noting.
-            print(f"Warning: Deleted event {event_id} from DB, but no corresponding JSON file was found.")
+        database.save_convoy_to_db(new_convoy)
     except Exception as e:
-        # If file deletion fails, this is a server error.
-        raise HTTPException(status_code=500, detail=f"Failed to delete event file: {e}")
+        print(f"Error creating convoy record: {e}")
+        raise HTTPException(status_code=500, detail=f"Database error on convoy creation: {e}")
+    return new_convoy
 
+@app.put("/api/convoys/{convoy_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Convoys"])
+async def update_convoy(convoy_id: str, payload: ConvoyUpdatePayload):
+    """Updates the metadata for an existing convoy."""
+    if not database.update_convoy_in_db(convoy_id, payload):
+        raise HTTPException(status_code=404, detail=f"Convoy with id {convoy_id} not found.")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-# backend/main.py
+
+@app.delete("/api/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Events"])
+async def delete_event(event_id: str):
+    if not database.delete_event_from_db(event_id):
+        raise HTTPException(status_code=404, detail=f"Event with id {event_id} not found.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
