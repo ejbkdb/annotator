@@ -21,7 +21,7 @@ const getSensorDisplayName = (id) => id.replace(/_/g, ' ').replace(/\b\w/g, l =>
 
 function AnnotationWorkspace({ 
   collections, selectedCollections, setSelectedCollections,
-  sensorOrder, setSensorOrder, jumpToData, activeReviewEvent
+  sensorOrder, setSensorOrder, jumpToData, activeReviewEvent, onEndReview
 }) {
   const [refinedAnnotations, setRefinedAnnotations] = useState([]);
   const [vehicleConfigs, setVehicleConfigs] = useState([]);
@@ -62,16 +62,10 @@ function AnnotationWorkspace({
 
   useEffect(() => {
     if (!selectedCollections.length || !startTime) {
-        setChartData({});
-        setErrors({});
-        return;
+        setChartData({}); setErrors({}); return;
     }
     const fetchAllWaveforms = async () => {
-      setIsLoading(true);
-      // CORRECTED: Explicitly clear previous state to prevent stale data.
-      setChartData({});
-      setErrors({});
-      
+      setIsLoading(true); setChartData({}); setErrors({});
       const endTime = new Date(startTime.getTime() + durationSecs * 1000);
       const promises = selectedCollections.map(c =>
         axios.get('/api/audio/waveform', { params: { collection: c, start: startTime.toISOString(), end: endTime.toISOString(), points: 2000 } })
@@ -79,18 +73,12 @@ function AnnotationWorkspace({
              .catch(err => ({ collection: c, data: [], error: err.response?.data?.detail || 'Failed' }))
       );
       const results = await Promise.all(promises);
-      const newChartData = {};
-      const newErrors = {};
+      const newChartData = {}; const newErrors = {};
       results.forEach(result => {
-        if (result.error) {
-          newErrors[result.collection] = result.error;
-        } else if (result.data?.length > 0) {
-          newChartData[result.collection] = result.data;
-        }
+        if (result.error) newErrors[result.collection] = result.error;
+        else if (result.data?.length > 0) newChartData[result.collection] = result.data;
       });
-      setChartData(newChartData);
-      setErrors(newErrors);
-      setIsLoading(false);
+      setChartData(newChartData); setErrors(newErrors); setIsLoading(false);
     };
     fetchAllWaveforms();
   }, [selectedCollections, startTime, durationSecs]);
@@ -130,7 +118,6 @@ function AnnotationWorkspace({
   const handleSaveAnnotation = async (sensorId) => {
     const annotation = pendingAnnotations.find(ann => ann.sensorId === sensorId);
     if (!annotation?.vehicle_type || !activeReviewEvent) return alert("Vehicle type and review session required.");
-
     const payload = { ...annotation, parent_event_id: activeReviewEvent.id, source_collection: sensorId, start_timestamp: annotation.start.toISOString(), end_timestamp: annotation.end.toISOString() };
     try {
         await axios.post('/api/annotations/refined', payload);
@@ -144,7 +131,6 @@ function AnnotationWorkspace({
     setStartTime(new Date(startTime.getTime() + (direction === 'next' ? 1 : -1) * durationSecs * 1000));
   };
   
-  // CORRECTED: Create a guaranteed unique and sorted list for rendering.
   const uniqueSortedSelectedCollections = useMemo(() => {
     const unique = Array.from(new Set(selectedCollections));
     return unique.sort((a, b) => sensorOrder.indexOf(a) - sensorOrder.indexOf(b));
@@ -153,18 +139,32 @@ function AnnotationWorkspace({
   return (
     <div className="workspace-container">
       <SensorSelector allCollections={collections} selectedCollections={selectedCollections} setSelectedCollections={setSelectedCollections} sensorOrder={sensorOrder} setSensorOrder={setSensorOrder} />
+      
       {selectedCollections.length > 0 && (
-        <>
-          <div className="time-controls-panel">
-            <div className="control-group"><span className="control-label">Window:</span><div className="button-tabs">{DURATION_OPTIONS.map(d => <button key={d} className={`tab-button ${d === durationSecs ? 'selected' : ''}`} onClick={() => setDurationSecs(d)}>{d}s</button>)}</div></div>
-            <div className="control-group"><button className="nav-button" onClick={() => handleNavigate('prev')}>{'<<'}</button><input type="datetime-local" value={formatForInput(startTime)} onChange={(e) => setStartTime(new Date(e.target.value + 'Z'))} step="1"/><button className="nav-button" onClick={() => handleNavigate('next')}>{'>>'}</button></div>
-          </div>
-          <div className="time-controls-panel" style={{justifyContent: "flex-start"}}>
-            <div className="control-group"><span className="control-label">Selection:</span><div className="button-tabs"><button className={`tab-button ${selectionMode === 'manual' ? 'selected' : ''}`} onClick={() => setSelectionMode('manual')}>Manual</button><button className={`tab-button ${selectionMode === 'fixed' ? 'selected' : ''}`} onClick={() => setSelectionMode('fixed')}>Fixed</button></div></div>
-            {selectionMode === 'fixed' && (<div className="control-group"><span className="control-label">Size:</span><div className="button-tabs">{FIXED_WINDOW_OPTIONS.map(d => <button key={d} className={`tab-button ${d === fixedWindowSize ? 'selected' : ''}`} onClick={() => setFixedWindowSize(d)}>{d}s</button>)}</div></div>)}
-          </div>
-        </>
+        <div className={`main-controls-panel ${activeReviewEvent ? 'review-mode' : ''}`}>
+            <div className="controls-left">
+                <div className="control-group"><span className="control-label">Window:</span><div className="button-tabs">{DURATION_OPTIONS.map(d => <button key={d} className={`tab-button ${d === durationSecs ? 'selected' : ''}`} onClick={() => setDurationSecs(d)}>{d}s</button>)}</div></div>
+                <div className="control-group"><span className="control-label">Selection:</span><div className="button-tabs"><button className={`tab-button ${selectionMode === 'manual' ? 'selected' : ''}`} onClick={() => setSelectionMode('manual')}>Manual</button><button className={`tab-button ${selectionMode === 'fixed' ? 'selected' : ''}`} onClick={() => setSelectionMode('fixed')}>Fixed</button></div></div>
+                {selectionMode === 'fixed' && (<div className="control-group"><div className="button-tabs">{FIXED_WINDOW_OPTIONS.map(d => <button key={d} className={`tab-button ${d === fixedWindowSize ? 'selected' : ''}`} onClick={() => setFixedWindowSize(d)}>{d}s</button>)}</div></div>)}
+            </div>
+            
+            <div className="controls-center">
+                <div className="control-group"><button className="nav-button" onClick={() => handleNavigate('prev')}>{'<<'}</button><input type="datetime-local" value={formatForInput(startTime)} onChange={(e) => setStartTime(new Date(e.target.value + 'Z'))} step="1"/><button className="nav-button" onClick={() => handleNavigate('next')}>{'>>'}</button></div>
+            </div>
+
+            {activeReviewEvent && (
+                <div className="controls-right">
+                    <div className="review-info-text">
+                        <span>Reviewing:</span>
+                        <strong>{activeReviewEvent.vehicle_type}</strong>
+                        <span>from {new Date(activeReviewEvent.start_timestamp).toLocaleDateString()}</span>
+                    </div>
+                    <button onClick={onEndReview} className="end-review-button">Finish & Mark Complete</button>
+                </div>
+            )}
+        </div>
       )}
+
       <div className="multi-sensor-view-scrollable">
         {isLoading ? <div className="loading-message">Loading Chart Data...</div> : uniqueSortedSelectedCollections.map(sensorId => {
             const pendingAnnotation = pendingAnnotations.find(ann => ann.sensorId === sensorId);

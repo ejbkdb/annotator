@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import IngestionView from './IngestionView';
 import AnnotationWorkspace from './AnnotationWorkspace';
-import ReviewSessionControls from './ReviewSessionControls';
 
-function FileAnnotationTab({ 
+function FileAnnotationTab({
   jumpToData,
   selectedCollections,
   setSelectedCollections,
@@ -16,22 +15,23 @@ function FileAnnotationTab({
   const [activeReviewEvent, setActiveReviewEvent] = useState(null);
   const [preReviewSelection, setPreReviewSelection] = useState(null);
 
+  // This effect fetches the list of all available collections once on mount.
   useEffect(() => {
     const fetchCollections = async () => {
       try {
         const { data: fetchedCollections } = await axios.get('/api/audio/collections');
         setCollections(fetchedCollections);
-
         if (fetchedCollections.length > 0) {
           setView('workspace');
-          
+          // Update the master sensor order with any new collections.
           setSensorOrder(prevOrder => {
             const combined = [...prevOrder, ...fetchedCollections];
             const unique = Array.from(new Set(combined));
+            // Ensure any sensors that were removed from the backend are also removed.
             return unique.filter(sensor => fetchedCollections.includes(sensor));
           });
-
         } else {
+          // If no collections exist, show the ingestion view.
           setView('ingestion');
         }
       } catch (error) {
@@ -39,53 +39,66 @@ function FileAnnotationTab({
       }
     };
     fetchCollections();
-  }, []);
+  // The empty dependency array `[]` ensures this runs only once after the initial render.
+  // We disable the exhaustive-deps lint rule here because setSensorOrder is stable
+  // and we explicitly want this to run only once.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); 
 
+  // This effect triggers when a review session is started from another tab.
   useEffect(() => {
+    // Only act if jumpToData has a value.
     if (jumpToData) {
+      // 1. Save the current sensor selection to restore it later.
       setPreReviewSelection(selectedCollections);
-      // --- USE THE FULL LIST OF COLLECTIONS FROM THE REVIEW TAB ---
+      
+      // 2. Set the selected collections for the review session.
       if (jumpToData.collectionsToLoad) {
         setSelectedCollections(jumpToData.collectionsToLoad);
       } else {
+        // Fallback for older implementation.
         setSelectedCollections([jumpToData.collection]);
       }
       
+      // 3. Set the active event to enter "review mode".
       setActiveReviewEvent(jumpToData.sourceEvent);
-      // Prioritize the display order based on the incoming list
+      
+      // 4. Update the sensor order to prioritize the collections for this review.
       setSensorOrder(prev => {
         const newOrder = jumpToData.collectionsToLoad || [jumpToData.collection];
         const combined = [...newOrder, ...prev];
         return Array.from(new Set(combined));
       });
     }
-  }, [jumpToData]);
+  // This effect must depend on `jumpToData` as its primary trigger.
+  // It also uses `selectedCollections` and calls the stable state setters,
+  // which are included to satisfy the rules of hooks and prevent stale state.
+  }, [jumpToData, selectedCollections, setSelectedCollections, setSensorOrder]);
 
-  const handleEndReview = () => {
+  // This function is passed down to end the review session.
+  const handleEndReview = useCallback(() => {
+    // Restore the previous sensor selection if one was saved.
     if (preReviewSelection !== null) {
       setSelectedCollections(preReviewSelection);
     }
     setPreReviewSelection(null);
     setActiveReviewEvent(null);
-  };
+  }, [preReviewSelection, setSelectedCollections]);
 
-  const handleIngestionComplete = (newCollectionName) => {
+  // This function handles the completion of a data ingestion task.
+  const handleIngestionComplete = useCallback((newCollectionName) => {
+    // Add the new collection to the master list.
     setCollections(prev => Array.from(new Set([...prev, newCollectionName])));
+    // Automatically select the newly ingested collection.
     if (!selectedCollections.includes(newCollectionName)) {
       setSelectedCollections(prev => [...prev, newCollectionName]);
     }
+    // Switch back to the main workspace view.
     setView('workspace');
-  };
+  }, [selectedCollections, setSelectedCollections]);
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {activeReviewEvent && (
-        <ReviewSessionControls 
-          sourceEvent={activeReviewEvent}
-          onEndReview={handleEndReview}
-        />
-      )}
-      
       {view === 'ingestion' ? (
         <IngestionView onIngestionComplete={handleIngestionComplete} />
       ) : (
@@ -97,9 +110,14 @@ function FileAnnotationTab({
           setSensorOrder={setSensorOrder}
           jumpToData={jumpToData}
           activeReviewEvent={activeReviewEvent}
+          onEndReview={handleEndReview}
         />
       )}
-      <button onClick={() => setView(view === 'ingestion' ? 'workspace' : 'ingestion')} style={{marginTop: '20px', flexShrink: 0}}>
+      {/* The button to toggle between views remains at the bottom */}
+      <button 
+        onClick={() => setView(view === 'ingestion' ? 'workspace' : 'ingestion')} 
+        style={{marginTop: 'auto', flexShrink: 0, padding: '10px'}}
+      >
         {view === 'ingestion' ? 'Go to Workspace' : 'Go to Ingestion'}
       </button>
     </div>

@@ -24,7 +24,6 @@ const usePersistentState = (key, defaultValue) => {
   return [state, setState];
 };
 
-
 const generateSensorColor = (sensorName) => {
   const colors = [
     '#61dafb', '#2a9d8f', '#e76f51', '#f4a261', '#e9c46a', 
@@ -48,8 +47,8 @@ function SensorSelector({
   setSensorOrder
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false); // State for collapsibility
   const [draggedItem, setDraggedItem] = useState(null);
-  // Use the persistent state hook for pinned sensors
   const [pinnedSensors, setPinnedSensors] = usePersistentState('pinnedSensors', []);
   const dropdownRef = useRef(null);
 
@@ -73,25 +72,18 @@ function SensorSelector({
   const handleSensorToggle = (sensorId) => {
     setSelectedCollections(prev => {
       const newSelection = new Set(prev);
-      if (newSelection.has(sensorId)) {
-        newSelection.delete(sensorId);
-      } else {
-        newSelection.add(sensorId);
-      }
-      const orderedSelection = sensorOrder.filter(sensor => newSelection.has(sensor));
-      return orderedSelection;
+      if (newSelection.has(sensorId)) newSelection.delete(sensorId);
+      else newSelection.add(sensorId);
+      return sensorOrder.filter(sensor => newSelection.has(sensor));
     });
   };
 
   const handlePinToggle = (sensorId, e) => {
-    e.stopPropagation(); // Prevent the dropdown from closing
+    e.stopPropagation();
     setPinnedSensors(prev => {
         const newPinned = new Set(prev);
-        if (newPinned.has(sensorId)) {
-            newPinned.delete(sensorId);
-        } else {
-            newPinned.add(sensorId);
-        }
+        if (newPinned.has(sensorId)) newPinned.delete(sensorId);
+        else newPinned.add(sensorId);
         return Array.from(newPinned);
     });
   };
@@ -111,115 +103,72 @@ function SensorSelector({
   };
 
   const getSensorDisplayName = (sensorId) => sensorId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-
   const selectedCount = selectedCollections.length;
   const totalCount = allCollections.length;
 
   return (
     <div className="sensor-selector-container" ref={dropdownRef}>
       <div className="sensor-selector-header">
-        <h3>Select Data Sensors (Pinned: {pinnedSensors.length})</h3>
+        <div className="header-left">
+            <button className={`collapse-toggle ${isCollapsed ? 'collapsed' : ''}`} onClick={() => setIsCollapsed(!isCollapsed)}>▼</button>
+            <h3>Select Data Sensors <span className="pinned-count">(Pinned: {pinnedSensors.length})</span></h3>
+        </div>
         <div className="sensor-selector-controls">
           <button onClick={() => setSelectedCollections(pinnedSensors)} className="control-button" disabled={pinnedSensors.length === 0}>Load Pinned</button>
-          <button onClick={() => setSelectedCollections(() => [])} className="control-button clear" disabled={selectedCount === 0}>Clear</button>
-          <button
-            onClick={() =>
-              setSelectedCollections(prev => {
-                const next = new Set(prev);
-                sensorOrder.forEach(s => { if (allCollections.includes(s)) next.add(s); });
-                return Array.from(next);
-              })
-            }
-            className="control-button all"
-            disabled={selectedCount === totalCount}
-          >
-            All
-          </button>
+          <button onClick={() => setSelectedCollections([])} className="control-button clear" disabled={selectedCount === 0}>Clear</button>
+          <button onClick={() => setSelectedCollections(sensorOrder.filter(s => allCollections.includes(s)))} className="control-button all" disabled={selectedCount === totalCount}>All</button>
         </div>
       </div>
-      <div className="dropdown-trigger" onClick={() => setIsOpen(!isOpen)}>
-        <div className="selected-summary">
-          {selectedCount === 0 ? <span className="placeholder-text">Choose sensors...</span> : (
-            <div className="selected-sensors-preview">
-              {selectedCollections.slice(0, 3).map(sensorId => (
-                <div key={sensorId} className="sensor-chip">
-                  <div className="sensor-color-dot" style={{ backgroundColor: generateSensorColor(sensorId) }} />
-                  <span>{getSensorDisplayName(sensorId)}</span>
-                </div>
-              ))}
-              {selectedCount > 3 && <span className="more-count">+{selectedCount - 3} more</span>}
-            </div>
-          )}
-        </div>
-        <div className="dropdown-arrow"><span className={`arrow ${isOpen ? 'open' : ''}`}>▼</span></div>
-      </div>
-      {isOpen && (
-        <div className="dropdown-menu">
-          <div className="dropdown-header">
-            <span className="selection-count">{selectedCount} of {totalCount} selected</span>
-            <span className="drag-hint">💡 Drag to reorder</span>
-          </div>
-          <div className="sensors-list">
-            {sensorOrder.filter(s => allCollections.includes(s)).map((sensorId, index) => (
-              <div
-                key={sensorId}
-                className={`sensor-item ${selectedCollections.includes(sensorId) ? 'selected' : ''} ${draggedItem === sensorId ? 'dragging' : ''}`}
-                draggable
-                onDragStart={(e) => setDraggedItem(sensorId)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => handleDrop(e, sensorId)}
-                onDragEnd={() => setDraggedItem(null)}
-              >
-                <div className="drag-handle">⋮⋮</div>
-                <label className="sensor-checkbox-label" onClick={(e) => e.stopPropagation()}>
-                  <input type="checkbox" checked={selectedCollections.includes(sensorId)} onChange={() => handleSensorToggle(sensorId)} className="sensor-checkbox" />
-                  <div className="sensor-info">
-                    <div className="sensor-color-indicator" style={{ backgroundColor: generateSensorColor(sensorId) }} />
-                    <div className="sensor-names">
-                      <span className="sensor-display-name">{getSensorDisplayName(sensorId)}</span>
-                      <span className="sensor-id">({sensorId})</span>
+      {!isCollapsed && (
+        <>
+            <div className="dropdown-trigger" onClick={() => setIsOpen(!isOpen)}>
+                <div className="selected-summary">
+                {selectedCount === 0 ? <span className="placeholder-text">Choose sensors...</span> : (
+                    <div className="selected-sensors-preview">
+                    {selectedCollections.slice(0, 4).map(sensorId => (
+                        <div key={sensorId} className="sensor-chip">
+                        <div className="sensor-color-dot" style={{ backgroundColor: generateSensorColor(sensorId) }} />
+                        <span>{getSensorDisplayName(sensorId)}</span>
+                        </div>
+                    ))}
+                    {selectedCount > 4 && <span className="more-count">+{selectedCount - 4} more</span>}
                     </div>
-                  </div>
-                </label>
-                {/* --- PINNING UI --- */}
-                <button 
-                    className="pin-button" 
-                    title={pinnedSensors.includes(sensorId) ? "Unpin Sensor" : "Pin Sensor"}
-                    onClick={(e) => handlePinToggle(sensorId, e)}
-                >
-                    {pinnedSensors.includes(sensorId) ? '★' : '☆'}
-                </button>
-                <div className="order-number">#{index + 1}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+                )}
+                </div>
+                <div className="dropdown-arrow"><span className={`arrow ${isOpen ? 'open' : ''}`}>▼</span></div>
+            </div>
+            {isOpen && (
+                <div className="dropdown-menu">
+                <div className="dropdown-header">
+                    <span className="selection-count">{selectedCount} of {totalCount} selected</span>
+                    <span className="drag-hint">💡 Drag to reorder</span>
+                </div>
+                <div className="sensors-list">
+                    {sensorOrder.filter(s => allCollections.includes(s)).map((sensorId, index) => (
+                    <div
+                        key={sensorId}
+                        className={`sensor-item ${selectedCollections.includes(sensorId) ? 'selected' : ''} ${draggedItem === sensorId ? 'dragging' : ''}`}
+                        draggable onDragStart={() => setDraggedItem(sensorId)} onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => handleDrop(e, sensorId)} onDragEnd={() => setDraggedItem(null)}
+                    >
+                        <div className="drag-handle">⋮⋮</div>
+                        <label className="sensor-checkbox-label" onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedCollections.includes(sensorId)} onChange={() => handleSensorToggle(sensorId)} className="sensor-checkbox" />
+                        <div className="sensor-info"><div className="sensor-color-indicator" style={{ backgroundColor: generateSensorColor(sensorId) }} />
+                            <div className="sensor-names"><span className="sensor-display-name">{getSensorDisplayName(sensorId)}</span><span className="sensor-id">({sensorId})</span></div>
+                        </div>
+                        </label>
+                        <button className={`pin-button ${pinnedSensors.includes(sensorId) ? 'pinned' : ''}`} title={pinnedSensors.includes(sensorId) ? "Unpin Sensor" : "Pin Sensor"} onClick={(e) => handlePinToggle(sensorId, e)}>★</button>
+                        <div className="order-number">#{index + 1}</div>
+                    </div>
+                    ))}
+                </div>
+                </div>
+            )}
+        </>
       )}
     </div>
   );
 }
-
-// Add some basic styling for the new pin button
-const style = document.createElement('style');
-style.innerHTML = `
-.sensor-item {
-    display: flex;
-    align-items: center;
-}
-.pin-button {
-    background: none;
-    border: none;
-    color: #f4a261;
-    cursor: pointer;
-    font-size: 1.5rem;
-    margin-left: auto;
-    padding: 0 10px;
-    order: 1; /* Ensure it comes before the order number */
-}
-.order-number {
-    order: 2;
-}
-`;
-document.head.appendChild(style);
 
 export default SensorSelector;
