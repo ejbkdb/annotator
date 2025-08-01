@@ -3,7 +3,7 @@ import sqlite3
 from .models import Event
 from typing import Optional, List
 
-DATABASE_FILE = "/home/eborcherding/Documents/annotator/test_range.db"
+DATABASE_FILE = "/home/eborcherding/Documents/annotator/test_range_pb.db"
 
 def init_db():
     conn = sqlite3.connect(DATABASE_FILE)
@@ -74,6 +74,15 @@ def save_refined_annotation_to_db(annotation_data: dict):
     conn.close()
     return get_refined_annotation_by_id(annotation_data['id'])
 
+def delete_refined_annotation_from_db(annotation_id: str) -> bool:
+    """Deletes a refined annotation by its ID. Returns True if a row was deleted."""
+    conn = sqlite3.connect(DATABASE_FILE)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM refined_annotations WHERE id = ?", (annotation_id,))
+    conn.commit()
+    deleted_rows = cursor.rowcount
+    conn.close()
+    return deleted_rows > 0
 
 def get_all_events_from_db(status: Optional[str] = None) -> list[dict]:
     conn = sqlite3.connect(DATABASE_FILE)

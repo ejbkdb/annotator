@@ -194,3 +194,22 @@ def query_raw_audio_data(collection: str, start: str, end: str) -> np.ndarray:
         except psycopg2.Error as e:
             print(f"ERROR: Raw audio query failed: {e}")
             raise HTTPException(status_code=500, detail="Database query for raw audio failed.")
+        
+def check_data_exists(collection: str, start: str, end: str) -> bool:
+    """
+    Efficiently checks if any data points exist in a given collection
+    within a specific time range without downloading the data.
+    """
+    sanitized_table_name = _sanitize_table_name(collection)
+    sql = f"SELECT COUNT(*) FROM \"{sanitized_table_name}\" WHERE ts BETWEEN '{start}' AND '{end}';"
+
+    try:
+        with _get_pg_connection() as conn, conn.cursor() as cur:
+            cur.execute(sql)
+            result = cur.fetchone()
+            # The query returns a tuple, e.g., (240000,). We check if the count is > 0.
+            return result[0] > 0 if result else False
+    except psycopg2.Error:
+        # If the table doesn't exist or there's another query error,
+        # we can safely assume no data exists for our purposes.
+        return False

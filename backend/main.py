@@ -181,6 +181,16 @@ async def create_refined_annotation(payload: RefinedAnnotationPayload):
 async def get_refined_annotations(parent_event_id: str):
     return database.get_refined_annotations_by_parent_id(parent_event_id)
 
+@router_annotations.delete("/api/annotations/refined/{annotation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_refined_annotation(annotation_id: str):
+    """Deletes a single refined annotation by its unique ID."""
+    was_deleted = database.delete_refined_annotation_from_db(annotation_id)
+    if not was_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Refined annotation with id '{annotation_id}' not found."
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 @router_export.get("/api/export/dataset")
 async def export_dataset(start_date: Optional[str] = None, end_date: Optional[str] = None, vehicle_types: Optional[List[str]] = Query(None)):

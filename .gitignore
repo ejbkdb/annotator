@@ -8,3 +8,6 @@ questdb_data/
 *.csv
 dist/
 event_clips/
+flac_dataset/
+analysis_plots/
+*.tar.gz

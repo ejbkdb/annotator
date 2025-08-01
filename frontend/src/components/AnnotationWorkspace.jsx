@@ -106,8 +106,10 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
   const handleChartHover = (timestamp) => {
     if (selectionMode !== 'fixed') return;
 
+    // Ensure fixedWindowSize is a valid number before calculating
+    const windowSecs = Number(fixedWindowSize) || 0;
     const hoverDate = parseISOString(timestamp);
-    const halfWindowMs = (fixedWindowSize * 1000) / 2;
+    const halfWindowMs = (windowSecs * 1000) / 2;
     const start = new Date(hoverDate.getTime() - halfWindowMs);
     const end = new Date(hoverDate.getTime() + halfWindowMs);
     setSelectionRange({ start, end });
@@ -117,7 +119,8 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     const clickedDate = parseISOString(timestamp);
 
     if (selectionMode === 'fixed') {
-        const halfWindowMs = (fixedWindowSize * 1000) / 2;
+        const windowSecs = Number(fixedWindowSize) || 0;
+        const halfWindowMs = (windowSecs * 1000) / 2;
         const start = new Date(clickedDate.getTime() - halfWindowMs);
         const end = new Date(clickedDate.getTime() + halfWindowMs);
         setSelectionRange({ start, end });
@@ -176,6 +179,20 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     } catch (err) { setError(`Failed to save annotation: ${err.response?.data?.detail || err.message}`); }
   };
 
+  const handleDeleteAnnotation = async (annotationId) => {
+    if (!window.confirm("Are you sure you want to permanently delete this refined annotation?")) {
+        return;
+    }
+    try {
+        await axios.delete(`/api/annotations/refined/${annotationId}`);
+        setRefinedAnnotations(prev => prev.filter(ann => ann.id !== annotationId));
+    } catch (err) {
+        const errorMsg = err.response?.data?.detail || err.message;
+        setError(`Failed to delete annotation: ${errorMsg}`);
+        alert(`Failed to delete annotation: ${errorMsg}`);
+    }
+  };
+
   const handleNavigate = (direction) => {
     if (!startTime || !availableRange.start) return;
     const hopMs = durationSecs * 1000;
@@ -197,6 +214,22 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
     const { name, value } = e.target;
     setActiveAnnotation(p => ({ ...p, [name]: value }));
   };
+
+  // --- NEW: Handler for the custom window size input ---
+  const handleCustomWindowChange = (e) => {
+    const value = e.target.value;
+    // Allow the input to be temporarily empty while the user is editing.
+    if (value === '') {
+        setFixedWindowSize('');
+        return;
+    }
+    const numValue = parseInt(value, 10);
+    // Only update state if it's a valid number within a reasonable range.
+    if (!isNaN(numValue) && numValue > 0 && numValue <= 300) {
+        setFixedWindowSize(numValue);
+    }
+  };
+
 
   return (
     <div className="workspace-container">
@@ -233,14 +266,36 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
                     <button className={`tab-button ${selectionMode === 'fixed' ? 'selected' : ''}`} onClick={() => setSelectionMode('fixed')}>Fixed Window</button>
                 </div>
             </div>
+            {/* --- MODIFICATION START --- */}
             {selectionMode === 'fixed' && (
                 <div className="control-group">
                     <span className="control-label">Window Size:</span>
                     <div className="button-tabs">
                         {FIXED_WINDOW_OPTIONS.map(d => <button key={d} className={`tab-button ${d === fixedWindowSize ? 'selected' : ''}`} onClick={() => setFixedWindowSize(d)}>{d}s</button>)}
                     </div>
+                    <input
+                        type="number"
+                        value={fixedWindowSize}
+                        onChange={handleCustomWindowChange}
+                        min="1"
+                        max="300"
+                        aria-label="Custom window size in seconds"
+                        style={{
+                            width: '70px',
+                            marginLeft: '10px',
+                            padding: '8px',
+                            backgroundColor: '#3a3f4a',
+                            color: 'white',
+                            border: '1px solid #555',
+                            borderRadius: '4px',
+                            textAlign: 'center',
+                            fontSize: '1em'
+                        }}
+                    />
+                    <span style={{ marginLeft: '2px', color: '#ccc' }}>s</span>
                 </div>
             )}
+            {/* --- MODIFICATION END --- */}
         </div>
         </>
       )}
@@ -293,7 +348,7 @@ function AnnotationWorkspace({ collections, selectedCollection, setSelectedColle
       )}
       
       <div className="event-log-container">
-        <EventLog events={refinedAnnotations} />
+        <EventLog events={refinedAnnotations} onDeleteAnnotation={handleDeleteAnnotation} />
       </div>
     </div>
   );

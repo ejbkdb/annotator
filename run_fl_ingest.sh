@@ -27,3 +27,5 @@ python -m backend.tests.run_bulk_ingest2 --folder-path "/home/pbelous/Documents/
 echo "Done with Case locations."
 
 echo "--- All Ingestion Tasks Complete ---"
+
+python -m backend.tests.run_bulk_ingest2 --folder-path "/home/eborcherding/Documents/florida/aggregated_2025-07-16/" --collection-name "orin_moth_foam"

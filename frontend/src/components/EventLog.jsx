@@ -1,7 +1,8 @@
 // frontend/src/components/EventLog.jsx
 import React from 'react';
 
-function EventLog({ events, onDeleteEvent }) {
+// --- MODIFIED: Added onDeleteAnnotation to props ---
+function EventLog({ events, onDeleteEvent, onDeleteAnnotation }) {
   if (!events || events.length === 0) {
     const message = onDeleteEvent ? "No events logged yet." : "No refined annotations created for this session.";
     return <h2>{message}</h2>;
@@ -31,15 +32,18 @@ function EventLog({ events, onDeleteEvent }) {
                   <span className="timestamp-display">
                     {times.local} (Local) / {times.utc} (UTC)
                   </span>
-                  {onDeleteEvent && (
+                  {/* --- MODIFIED: Added logic for annotation deletion button --- */}
+                  {onDeleteEvent && !isRefined && (
                     <button onClick={() => onDeleteEvent(event.id)} className="delete-event-button" title="Delete event">×</button>
+                  )}
+                  {onDeleteAnnotation && isRefined && (
+                     <button onClick={() => onDeleteAnnotation(event.id)} className="delete-event-button" title="Delete annotation">×</button>
                   )}
                 </div>
               </div>
               <div className="event-log-item-details">
                 {isRefined ? (
                   <>
-                    {/* --- MODIFIED: Added Source Collection --- */}
                     <strong>Source:</strong> {event.source_collection || 'N/A'} | <strong>Location:</strong> {event.location || 'N/A'} | <strong>Action:</strong> {event.action || 'N/A'}<br/>
                     <strong>Direction:</strong> {event.direction || 'N/A'} | <strong>Subclass:</strong> {event.vehicle_subclass || 'N/A'} <br/>
                     <strong>Notes:</strong> {event.annotator_notes || 'None'}
