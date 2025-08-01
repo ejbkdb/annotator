@@ -1,355 +1,195 @@
-// frontend/src/components/AnnotationWorkspace.jsx
-
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import TimeSeriesChart from './TimeSeriesChart';
 import EventLog from './EventLog';
+import SensorSelector from './SensorSelector';
 import './AnnotationWorkspace.css';
-
 import { parseISOString, formatForInput } from '../utils/time';
 
 const DURATION_OPTIONS = [5, 10, 20, 50, 100];
-const FIXED_WINDOW_OPTIONS = [5, 8, 10]; // seconds
+const FIXED_WINDOW_OPTIONS = [5, 8, 10];
+const defaultAnnotationState = { vehicle_type: '', location: 'tarmac', action: 'driveby', direction: 'na', annotator_notes: '' };
 
-const defaultAnnotationState = {
-    vehicle_type: '', location: 'tarmac', action: 'driveby',
-    direction: 'na', // --- MODIFIED: Set default to 'na' ---
-    annotator_notes: ''
+const generateSensorColor = (name) => {
+    const colors = ['#61dafb', '#2a9d8f', '#e76f51', '#f4a261', '#e9c46a', '#264653', '#9b59b6', '#3498db', '#95a5a6', '#e67e22'];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) { hash = name.charCodeAt(i) + ((hash << 5) - hash); }
+    return colors[Math.abs(hash) % colors.length];
 };
 
-function AnnotationWorkspace({ collections, selectedCollection, setSelectedCollection, jumpToData, activeReviewEvent }) {
+const getSensorDisplayName = (id) => id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+function AnnotationWorkspace({ 
+  collections, selectedCollections, setSelectedCollections,
+  sensorOrder, setSensorOrder, jumpToData, activeReviewEvent
+}) {
   const [refinedAnnotations, setRefinedAnnotations] = useState([]);
   const [vehicleConfigs, setVehicleConfigs] = useState([]);
-  const [availableRange, setAvailableRange] = useState({ start: null, end: null });
-  const [error, setError] = useState('');
-  
+  const [chartData, setChartData] = useState({});
+  const [selectionRange, setSelectionRange] = useState({});
+  const [errors, setErrors] = useState({});
   const [startTime, setStartTime] = useState(null);
   const [durationSecs, setDurationSecs] = useState(10);
-  const [points, setPoints] = useState(2000);
-
-  const [chartData, setChartData] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
-
   const [selectionMode, setSelectionMode] = useState('manual');
   const [fixedWindowSize, setFixedWindowSize] = useState(8);
-  const [isSelecting, setIsSelecting] = useState(false);
-  const [selectionRange, setSelectionRange] = useState(null);
-  const [activeAnnotation, setActiveAnnotation] = useState(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const audioRef = useRef(new Audio());
+  const [isSelecting, setIsSelecting] = useState('');
+  const [pendingAnnotations, setPendingAnnotations] = useState([]);
 
-  useEffect(() => {
-    if (jumpToData) {
-      setStartTime(jumpToData.startTime);
-      setDurationSecs(jumpToData.durationSecs);
-      setRefinedAnnotations([]);
-    }
-  }, [jumpToData]);
-
-  useEffect(() => {
-    axios.get('/api/config/vehicles').then(res => setVehicleConfigs(res.data));
-  }, []);
-
-  const fetchRefinedAnnotations = useCallback(async () => {
+  const fetchRefinedAnnotations = useCallback(() => {
     if (activeReviewEvent?.id) {
-        try {
-            const response = await axios.get('/api/annotations/refined', { params: { parent_event_id: activeReviewEvent.id } });
-            setRefinedAnnotations(response.data);
-        } catch (err) {
-            console.error("Could not fetch refined annotations", err);
-        }
+        axios.get('/api/annotations/refined', { params: { parent_event_id: activeReviewEvent.id } })
+             .then(res => setRefinedAnnotations(res.data))
+             .catch(err => console.error("Could not fetch refined annotations", err));
+    } else {
+        setRefinedAnnotations([]);
     }
   }, [activeReviewEvent]);
 
   useEffect(() => {
+    axios.get('/api/config/vehicles').then(res => setVehicleConfigs(res.data));
     fetchRefinedAnnotations();
   }, [fetchRefinedAnnotations]);
-
-  useEffect(() => {
-    if (!selectedCollection) {
-      setStartTime(null); setAvailableRange({ start: null, end: null }); setChartData([]);
-      return;
-    }
-    const fetchCollectionInfo = async () => {
-      try {
-        setError('');
-        const response = await axios.get(`/api/audio/collections/${selectedCollection}/info`);
-        const { start, end } = response.data.time_range;
-        const startUTC = parseISOString(start);
-        const endUTC = parseISOString(end);
-        setAvailableRange({ start: startUTC, end: endUTC });
-        if (!jumpToData) { setStartTime(startUTC); }
-      } catch (err) {
-        setError(`Could not fetch info for '${selectedCollection}': ${err.response?.data?.detail || err.message}`);
-        setAvailableRange({ start: null, end: null }); setStartTime(null);
-      }
-    };
-    fetchCollectionInfo();
-    setRefinedAnnotations([]);
-  }, [selectedCollection, jumpToData]);
-
-  useEffect(() => {
-    if (!selectedCollection || !startTime) return;
-    const endTime = new Date(startTime.getTime() + durationSecs * 1000);
-    const fetchWaveformData = async () => {
-      setIsLoading(true); setError('');
-      try {
-        const response = await axios.get('/api/audio/waveform', { params: { collection: selectedCollection, start: startTime.toISOString(), end: endTime.toISOString(), points: points } });
-        setChartData(response.data);
-      } catch (err) {
-        setError(err.response?.data?.detail || 'Failed to fetch waveform'); setChartData([]);
-      } finally { setIsLoading(false); }
-    };
-    fetchWaveformData();
-  }, [selectedCollection, startTime, durationSecs, points]);
   
-  const handleChartHover = (timestamp) => {
-    if (selectionMode !== 'fixed') return;
+  useEffect(() => {
+    if (jumpToData) {
+        setStartTime(jumpToData.startTime);
+        setDurationSecs(jumpToData.durationSecs);
+        setSelectionRange({});
+        setPendingAnnotations([]);
+    }
+  }, [jumpToData]);
 
-    // Ensure fixedWindowSize is a valid number before calculating
-    const windowSecs = Number(fixedWindowSize) || 0;
-    const hoverDate = parseISOString(timestamp);
-    const halfWindowMs = (windowSecs * 1000) / 2;
-    const start = new Date(hoverDate.getTime() - halfWindowMs);
-    const end = new Date(hoverDate.getTime() + halfWindowMs);
-    setSelectionRange({ start, end });
-  };
-
-  const handleChartClick = (timestamp) => {
-    const clickedDate = parseISOString(timestamp);
-
-    if (selectionMode === 'fixed') {
-        const windowSecs = Number(fixedWindowSize) || 0;
-        const halfWindowMs = (windowSecs * 1000) / 2;
-        const start = new Date(clickedDate.getTime() - halfWindowMs);
-        const end = new Date(clickedDate.getTime() + halfWindowMs);
-        setSelectionRange({ start, end });
-        setActiveAnnotation({ ...defaultAnnotationState, vehicle_type: activeReviewEvent?.vehicle_type || '' });
+  useEffect(() => {
+    if (!selectedCollections.length || !startTime) {
+        setChartData({});
+        setErrors({});
         return;
     }
-    if (!isSelecting) {
-      setIsSelecting(true);
-      setSelectionRange({ start: clickedDate, end: null });
-      setActiveAnnotation(null);
-    } else {
-      let [finalStart, finalEnd] = [selectionRange.start, clickedDate].sort((a,b) => a - b);
-      setSelectionRange({ start: finalStart, end: finalEnd });
-      setIsSelecting(false);
-      setActiveAnnotation({ ...defaultAnnotationState, vehicle_type: activeReviewEvent?.vehicle_type || '' });
-    }
-  };
-
-  const cancelSelection = () => {
-    setIsSelecting(false); setSelectionRange(null); setActiveAnnotation(null);
-  };
-
-  const handlePlayAudio = async () => {
-    if (!selectionRange?.start || !selectionRange?.end) return;
-    setIsPlaying(true);
-    try {
-      const response = await axios.get('/api/audio/raw', {
-        params: { collection: selectedCollection, start: selectionRange.start.toISOString(), end: selectionRange.end.toISOString() },
-        responseType: 'arraybuffer',
+    const fetchAllWaveforms = async () => {
+      setIsLoading(true);
+      // CORRECTED: Explicitly clear previous state to prevent stale data.
+      setChartData({});
+      setErrors({});
+      
+      const endTime = new Date(startTime.getTime() + durationSecs * 1000);
+      const promises = selectedCollections.map(c =>
+        axios.get('/api/audio/waveform', { params: { collection: c, start: startTime.toISOString(), end: endTime.toISOString(), points: 2000 } })
+             .then(res => ({ collection: c, data: res.data, error: null }))
+             .catch(err => ({ collection: c, data: [], error: err.response?.data?.detail || 'Failed' }))
+      );
+      const results = await Promise.all(promises);
+      const newChartData = {};
+      const newErrors = {};
+      results.forEach(result => {
+        if (result.error) {
+          newErrors[result.collection] = result.error;
+        } else if (result.data?.length > 0) {
+          newChartData[result.collection] = result.data;
+        }
       });
-      const audioUrl = URL.createObjectURL(new Blob([response.data], { type: 'audio/wav' }));
-      audioRef.current.src = audioUrl;
-      audioRef.current.play();
-      audioRef.current.onended = () => { setIsPlaying(false); URL.revokeObjectURL(audioUrl); };
-    } catch (err) {
-      setError('Failed to fetch or play audio clip.'); setIsPlaying(false);
-    }
-  };
-
-  const handleSaveAnnotation = async () => {
-    if (!activeAnnotation.vehicle_type || !activeReviewEvent) {
-        alert("Cannot save: vehicle type and an active review session are required.");
-        return;
-    }
-    const payload = {
-        parent_event_id: activeReviewEvent.id,
-        source_collection: selectedCollection,
-        start_timestamp: selectionRange.start.toISOString(),
-        end_timestamp: selectionRange.end.toISOString(),
-        ...activeAnnotation
+      setChartData(newChartData);
+      setErrors(newErrors);
+      setIsLoading(false);
     };
-    try {
-        const response = await axios.post('/api/annotations/refined', payload);
-        setRefinedAnnotations(prev => [...prev, response.data]);
-        cancelSelection();
-    } catch (err) { setError(`Failed to save annotation: ${err.response?.data?.detail || err.message}`); }
+    fetchAllWaveforms();
+  }, [selectedCollections, startTime, durationSecs]);
+
+  const addOrUpdateAnnotation = (sensorId, start, end) => {
+    setSelectionRange(prev => ({ ...prev, [sensorId]: { start, end } }));
+    const newAnnotation = { ...defaultAnnotationState, vehicle_type: activeReviewEvent?.vehicle_type || '', sensorId, start, end };
+    setPendingAnnotations(prev => [...prev.filter(ann => ann.sensorId !== sensorId), newAnnotation]);
+    setIsSelecting('');
   };
 
-  const handleDeleteAnnotation = async (annotationId) => {
-    if (!window.confirm("Are you sure you want to permanently delete this refined annotation?")) {
-        return;
-    }
-    try {
-        await axios.delete(`/api/annotations/refined/${annotationId}`);
-        setRefinedAnnotations(prev => prev.filter(ann => ann.id !== annotationId));
-    } catch (err) {
-        const errorMsg = err.response?.data?.detail || err.message;
-        setError(`Failed to delete annotation: ${errorMsg}`);
-        alert(`Failed to delete annotation: ${errorMsg}`);
+  const handleChartClick = (timestamp, sensorId) => {
+    const clickedDate = parseISOString(timestamp);
+    if (selectionMode === 'fixed') {
+        const halfWindowMs = (Number(fixedWindowSize) * 1000) / 2;
+        addOrUpdateAnnotation(sensorId, new Date(clickedDate.getTime() - halfWindowMs), new Date(clickedDate.getTime() + halfWindowMs));
+    } else {
+        if (isSelecting !== sensorId) {
+            setIsSelecting(sensorId);
+            setSelectionRange(prev => ({ ...prev, [sensorId]: { start: clickedDate, end: null } }));
+        } else {
+            const [start, end] = [selectionRange[sensorId].start, clickedDate].sort((a, b) => a - b);
+            addOrUpdateAnnotation(sensorId, start, end);
+        }
     }
   };
 
+  const cancelAnnotation = (sensorId) => {
+    setSelectionRange(prev => { const newState = {...prev}; delete newState[sensorId]; return newState; });
+    setPendingAnnotations(prev => prev.filter(ann => ann.sensorId !== sensorId));
+  };
+
+  const handleAnnotationInputChange = (sensorId, field, value) => {
+    setPendingAnnotations(prev => prev.map(ann => ann.sensorId === sensorId ? { ...ann, [field]: value } : ann));
+  };
+  
+  const handleSaveAnnotation = async (sensorId) => {
+    const annotation = pendingAnnotations.find(ann => ann.sensorId === sensorId);
+    if (!annotation?.vehicle_type || !activeReviewEvent) return alert("Vehicle type and review session required.");
+
+    const payload = { ...annotation, parent_event_id: activeReviewEvent.id, source_collection: sensorId, start_timestamp: annotation.start.toISOString(), end_timestamp: annotation.end.toISOString() };
+    try {
+        await axios.post('/api/annotations/refined', payload);
+        fetchRefinedAnnotations();
+        cancelAnnotation(sensorId);
+    } catch (err) { alert(`Failed to save: ${err.response?.data?.detail || err.message}`); }
+  };
+  
   const handleNavigate = (direction) => {
-    if (!startTime || !availableRange.start) return;
-    const hopMs = durationSecs * 1000;
-    const currentMs = startTime.getTime();
-    let newMs = direction === 'next' ? currentMs + hopMs : currentMs - hopMs;
-    const availableStartMs = availableRange.start.getTime();
-    const availableEndMs = availableRange.end.getTime();
-    if (newMs < availableStartMs) newMs = availableStartMs;
-    if (newMs >= (availableEndMs - hopMs)) newMs = availableEndMs - hopMs;
-    setStartTime(new Date(newMs));
+    if (!startTime) return;
+    setStartTime(new Date(startTime.getTime() + (direction === 'next' ? 1 : -1) * durationSecs * 1000));
   };
-
-  const handleTimeInputChange = (e) => {
-    const userDate = new Date(e.target.value + 'Z');
-    if (!isNaN(userDate)) { setStartTime(userDate); }
-  };
-
-  const handleAnnotationInputChange = (e) => {
-    const { name, value } = e.target;
-    setActiveAnnotation(p => ({ ...p, [name]: value }));
-  };
-
-  // --- NEW: Handler for the custom window size input ---
-  const handleCustomWindowChange = (e) => {
-    const value = e.target.value;
-    // Allow the input to be temporarily empty while the user is editing.
-    if (value === '') {
-        setFixedWindowSize('');
-        return;
-    }
-    const numValue = parseInt(value, 10);
-    // Only update state if it's a valid number within a reasonable range.
-    if (!isNaN(numValue) && numValue > 0 && numValue <= 300) {
-        setFixedWindowSize(numValue);
-    }
-  };
-
+  
+  // CORRECTED: Create a guaranteed unique and sorted list for rendering.
+  const uniqueSortedSelectedCollections = useMemo(() => {
+    const unique = Array.from(new Set(selectedCollections));
+    return unique.sort((a, b) => sensorOrder.indexOf(a) - sensorOrder.indexOf(b));
+  }, [selectedCollections, sensorOrder]);
 
   return (
     <div className="workspace-container">
-      <div className="workspace-controls">
-        <label htmlFor="collection-select">Select Data Collection:</label>
-        <select id="collection-select" value={selectedCollection} onChange={(e) => setSelectedCollection(e.target.value)}>
-          <option value="">-- Choose a collection --</option>
-          {collections.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
-
-      {error && <p style={{ color: 'red', padding: '10px' }}>{error}</p>}
-
-      {availableRange.start && (
+      <SensorSelector allCollections={collections} selectedCollections={selectedCollections} setSelectedCollections={setSelectedCollections} sensorOrder={sensorOrder} setSensorOrder={setSensorOrder} />
+      {selectedCollections.length > 0 && (
         <>
-        <div className="time-controls-panel">
-          <div className="control-group">
-            <span className="control-label">Window:</span>
-            <div className="button-tabs">
-              {DURATION_OPTIONS.map(d => <button key={d} className={`tab-button ${d === durationSecs ? 'selected' : ''}`} onClick={() => setDurationSecs(d)}>{d}s</button>)}
-            </div>
+          <div className="time-controls-panel">
+            <div className="control-group"><span className="control-label">Window:</span><div className="button-tabs">{DURATION_OPTIONS.map(d => <button key={d} className={`tab-button ${d === durationSecs ? 'selected' : ''}`} onClick={() => setDurationSecs(d)}>{d}s</button>)}</div></div>
+            <div className="control-group"><button className="nav-button" onClick={() => handleNavigate('prev')}>{'<<'}</button><input type="datetime-local" value={formatForInput(startTime)} onChange={(e) => setStartTime(new Date(e.target.value + 'Z'))} step="1"/><button className="nav-button" onClick={() => handleNavigate('next')}>{'>>'}</button></div>
           </div>
-          <div className="control-group navigation-group">
-            <button className="nav-button" onClick={() => handleNavigate('prev')}>{'<<'} Prev</button>
-            <div className="start-time-input"><label htmlFor="start-time">Start Time (UTC):</label><input type="datetime-local" id="start-time" value={formatForInput(startTime)} onChange={handleTimeInputChange} step="1"/></div>
-            <button className="nav-button" onClick={() => handleNavigate('next')}>Next {'>>'}</button>
+          <div className="time-controls-panel" style={{justifyContent: "flex-start"}}>
+            <div className="control-group"><span className="control-label">Selection:</span><div className="button-tabs"><button className={`tab-button ${selectionMode === 'manual' ? 'selected' : ''}`} onClick={() => setSelectionMode('manual')}>Manual</button><button className={`tab-button ${selectionMode === 'fixed' ? 'selected' : ''}`} onClick={() => setSelectionMode('fixed')}>Fixed</button></div></div>
+            {selectionMode === 'fixed' && (<div className="control-group"><span className="control-label">Size:</span><div className="button-tabs">{FIXED_WINDOW_OPTIONS.map(d => <button key={d} className={`tab-button ${d === fixedWindowSize ? 'selected' : ''}`} onClick={() => setFixedWindowSize(d)}>{d}s</button>)}</div></div>)}
           </div>
-        </div>
-        <div className="time-controls-panel" style={{justifyContent: "flex-start"}}>
-            <div className="control-group">
-                <span className="control-label">Selection Mode:</span>
-                <div className="button-tabs">
-                    <button className={`tab-button ${selectionMode === 'manual' ? 'selected' : ''}`} onClick={() => setSelectionMode('manual')}>Manual</button>
-                    <button className={`tab-button ${selectionMode === 'fixed' ? 'selected' : ''}`} onClick={() => setSelectionMode('fixed')}>Fixed Window</button>
-                </div>
-            </div>
-            {/* --- MODIFICATION START --- */}
-            {selectionMode === 'fixed' && (
-                <div className="control-group">
-                    <span className="control-label">Window Size:</span>
-                    <div className="button-tabs">
-                        {FIXED_WINDOW_OPTIONS.map(d => <button key={d} className={`tab-button ${d === fixedWindowSize ? 'selected' : ''}`} onClick={() => setFixedWindowSize(d)}>{d}s</button>)}
-                    </div>
-                    <input
-                        type="number"
-                        value={fixedWindowSize}
-                        onChange={handleCustomWindowChange}
-                        min="1"
-                        max="300"
-                        aria-label="Custom window size in seconds"
-                        style={{
-                            width: '70px',
-                            marginLeft: '10px',
-                            padding: '8px',
-                            backgroundColor: '#3a3f4a',
-                            color: 'white',
-                            border: '1px solid #555',
-                            borderRadius: '4px',
-                            textAlign: 'center',
-                            fontSize: '1em'
-                        }}
-                    />
-                    <span style={{ marginLeft: '2px', color: '#ccc' }}>s</span>
-                </div>
-            )}
-            {/* --- MODIFICATION END --- */}
-        </div>
         </>
       )}
-
-      {isLoading ? ( <div className="loading-message">Loading Chart Data...</div> ) : (
-        <TimeSeriesChart 
-          chartData={chartData} 
-          onChartClick={handleChartClick} 
-          onChartHover={handleChartHover}
-          selection={selectionRange} 
-        />
-      )}
-      
-      {isSelecting && (
-        <div className="selection-prompt">
-          Click a second point on the chart to finish selection... (or{' '}
-          <button className="link-button" onClick={cancelSelection}>Cancel</button>)
-        </div>
-      )}
-
-      {activeAnnotation && selectionRange?.end && (
-        <div className="annotation-form">
-          <h4>New Refined Annotation</h4>
-          <p>Duration: {((selectionRange.end - selectionRange.start)/1000).toFixed(2)}s</p>
-          <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
-              <select name="vehicle_type" value={activeAnnotation.vehicle_type} onChange={handleAnnotationInputChange}>
-                <option value="">-- Select Vehicle --</option>
-                {vehicleConfigs.map(v => <option key={v.id} value={v.id}>{v.displayName}</option>)}
-              </select>
-              <select name="location" value={activeAnnotation.location} onChange={handleAnnotationInputChange}>
-                <option value="tarmac">Tarmac</option><option value="fastpass">Fastpass</option><option value="jungle">Jungle</option>
-              </select>
-              <select name="action" value={activeAnnotation.action} onChange={handleAnnotationInputChange}>
-                <option value="driveby">Driveby</option><option value="rev">Rev</option><option value="idle">Idle</option><option value="flying">Flying</option><option value="hover">Hover</option>
-              </select>
-              {/* --- MODIFIED: Added 'na' option to dropdown --- */}
-              <select name="direction" value={activeAnnotation.direction} onChange={handleAnnotationInputChange}>
-                <option value="towards_de">Towards DE</option>
-                <option value="towards_103">Towards 103</option>
-                <option value="na">N/A</option>
-              </select>
-          </div>
-          <textarea name="annotator_notes" placeholder="Notes..." value={activeAnnotation.annotator_notes} onChange={handleAnnotationInputChange}/>
-          <div className="form-actions">
-            <button onClick={handlePlayAudio} disabled={isPlaying}>{isPlaying ? 'Playing...' : 'Play Audio'}</button>
-            <button onClick={handleSaveAnnotation} className="save-button">Save Annotation</button>
-            <button onClick={cancelSelection}>Cancel</button>
-          </div>
-        </div>
-      )}
-      
-      <div className="event-log-container">
-        <EventLog events={refinedAnnotations} onDeleteAnnotation={handleDeleteAnnotation} />
+      <div className="multi-sensor-view-scrollable">
+        {isLoading ? <div className="loading-message">Loading Chart Data...</div> : uniqueSortedSelectedCollections.map(sensorId => {
+            const pendingAnnotation = pendingAnnotations.find(ann => ann.sensorId === sensorId);
+            return (
+            <div key={sensorId} className="sensor-plot-container">
+              <div className="sensor-header"><div className="sensor-title"><div className="sensor-color-dot" style={{ backgroundColor: generateSensorColor(sensorId) }}></div><h3>{getSensorDisplayName(sensorId)}</h3></div>{errors[sensorId] && <div className="sensor-error">⚠️ {errors[sensorId]}</div>}</div>
+              {(chartData[sensorId] && chartData[sensorId].length > 0) ? (<TimeSeriesChart chartData={chartData[sensorId]} onChartClick={(ts) => handleChartClick(ts, sensorId)} selection={selectionRange[sensorId]} color={generateSensorColor(sensorId)} />) : <div className="no-data-message">{!errors[sensorId] && "No data available"}</div>}
+              {pendingAnnotation && (
+                <div className="sensor-annotation-form">
+                    <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                        <select value={pendingAnnotation.vehicle_type} onChange={(e) => handleAnnotationInputChange(sensorId, 'vehicle_type', e.target.value)}><option value="">-- Vehicle --</option>{vehicleConfigs.map(v => <option key={v.id} value={v.id}>{v.displayName}</option>)}</select>
+                        <select value={pendingAnnotation.location} onChange={(e) => handleAnnotationInputChange(sensorId, 'location', e.target.value)}><option value="tarmac">Tarmac</option><option value="fastpass">Fastpass</option><option value="jungle">Jungle</option></select>
+                        <select value={pendingAnnotation.action} onChange={(e) => handleAnnotationInputChange(sensorId, 'action', e.target.value)}><option value="driveby">Driveby</option><option value="rev">Rev</option><option value="idle">Idle</option><option value="flying">Flying</option><option value="hover">Hover</option></select>
+                        <select value={pendingAnnotation.direction} onChange={(e) => handleAnnotationInputChange(sensorId, 'direction', e.target.value)}><option value="towards_de">Towards DE</option><option value="towards_103">Towards 103</option><option value="na">N/A</option></select>
+                    </div>
+                    <textarea placeholder="Notes..." value={pendingAnnotation.annotator_notes} onChange={(e) => handleAnnotationInputChange(sensorId, 'annotator_notes', e.target.value)}/>
+                    <div className="form-actions"><button onClick={() => handleSaveAnnotation(sensorId)} className="save-button">Save</button><button onClick={() => cancelAnnotation(sensorId)}>Cancel</button></div>
+                </div>
+              )}
+            </div>
+            )
+        })}
       </div>
+      {isSelecting && <div className="selection-prompt">Click a second point on the <strong>{getSensorDisplayName(isSelecting)}</strong> chart... (or <button className="link-button" onClick={() => setIsSelecting('')}>Cancel</button>)</div>}
+      <div className="event-log-container"><EventLog events={refinedAnnotations} onDeleteAnnotation={(id) => { if(window.confirm("Delete?")) { axios.delete(`/api/annotations/refined/${id}`).then(fetchRefinedAnnotations); }}} /></div>
     </div>
   );
 }

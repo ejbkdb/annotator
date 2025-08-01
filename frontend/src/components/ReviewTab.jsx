@@ -9,22 +9,20 @@ function ReviewTab({ onJumpTo }) {
   const [sortOrder, setSortOrder] = useState('asc');
 
   const fetchManualEvents = useCallback(async () => {
+    setIsLoading(true);
     try {
-      setIsLoading(true);
-      setError('');
       const response = await axios.get('/api/events?status=manual');
       setManualEvents(response.data);
     } catch (err) {
       setError('Failed to fetch manual events.');
-      console.error(err);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(fetchManualEvents, 5000);
     fetchManualEvents();
+    const interval = setInterval(fetchManualEvents, 10000);
     return () => clearInterval(interval);
   }, [fetchManualEvents]);
 
@@ -32,55 +30,47 @@ function ReviewTab({ onJumpTo }) {
     return [...manualEvents].sort((a, b) => {
       const dateA = new Date(a.start_timestamp);
       const dateB = new Date(b.start_timestamp);
-      return sortOrder === 'asc' ? dateA - dateB : dateB - dateA;
+      return sortOrder === 'asc' ? dateA - dateB : dateB - a;
     });
   }, [manualEvents, sortOrder]);
 
   const handleReviewClick = async (event) => {
     try {
-      // --- FIX: Corrected template literal string ---
       const response = await axios.get(`/api/events/${event.id}/suggest-collection`);
       const { suggested_collection } = response.data;
-
       if (!suggested_collection) {
-        // --- FIX: Corrected alert syntax ---
-        alert(`Could not find a data collection for timestamp: ${event.start_timestamp}`);
-        return;
+        return alert(`Could not find a data collection for timestamp: ${event.start_timestamp}`);
       }
       
+      // Correctly calculate time range to restore functionality
       const paddingSecs = 10;
-      const eventDuration = (new Date(event.end_timestamp) - new Date(event.start_timestamp)) / 1000;
-      const windowDuration = Math.max(20, eventDuration + paddingSecs);
-      const startTime = new Date(new Date(event.start_timestamp).getTime() - (paddingSecs / 2) * 1000);
+      const eventStart = new Date(event.start_timestamp);
+      const eventEnd = new Date(event.end_timestamp);
+      const eventDurationSecs = (eventEnd - eventStart) / 1000;
+      const windowDuration = Math.max(20, eventDurationSecs + paddingSecs);
+      const startTimeWithPadding = new Date(eventStart.getTime() - (paddingSecs / 2) * 1000);
 
-      onJumpTo({ collection: suggested_collection, startTime, durationSecs: windowDuration, sourceEvent: event });
+      onJumpTo({ 
+        collection: suggested_collection, 
+        startTime: startTimeWithPadding, 
+        durationSecs: windowDuration, 
+        sourceEvent: event 
+      });
 
     } catch (err) {
       alert('An error occurred while trying to find the collection.');
-      console.error(err);
     }
   };
   
   const handleResetClick = async (eventId) => {
-    if (!window.confirm("Are you sure? This will delete all refined clips for this event and reset its status to 'manual' for re-annotation.")) {
-      return;
-    }
+    if (!window.confirm("Are you sure? This will delete all refined clips and reset the event.")) return;
     try {
-      // --- FIX: Corrected template literal string ---
       await axios.post(`/api/events/${eventId}/reset`);
-      // --- FIX: Corrected alert syntax ---
-      alert(`Event ${eventId} has been reset.`);
-      // The list will auto-refresh via the interval, so we don't need to manually update state here.
+      fetchManualEvents();
     } catch (err) {
-      // --- FIX: Corrected alert syntax ---
       alert(`Failed to reset event: ${err.response?.data?.detail || err.message}`);
     }
   };
-
-  const formatTimestamp = (isoString) => {
-      if (!isoString) return 'N/A';
-      return new Date(isoString).toLocaleString();
-  }
 
   if (isLoading && manualEvents.length === 0) return <div>Loading events for review...</div>;
   if (error) return <div style={{ color: 'red' }}>{error}</div>;
@@ -89,25 +79,18 @@ function ReviewTab({ onJumpTo }) {
     <div className="review-container">
       <div className="review-header">
         <h2>Manual Events Pending Review ({manualEvents.length})</h2>
-        <button 
-          className="sort-button"
-          onClick={() => setSortOrder(current => current === 'desc' ? 'asc' : 'desc')}
-        >
+        <button className="sort-button" onClick={() => setSortOrder(current => current === 'desc' ? 'asc' : 'desc')}>
           Sort: {sortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
         </button>
       </div>
-      <p>Click 'Review' to refine an annotation. 'Reset' will delete all children and set the parent back to manual. The list auto-refreshes.</p>
+      <p>Click 'Review' to load the event and associated sensor data. The list auto-refreshes.</p>
       
       <div className="review-list">
-        {manualEvents.length === 0 ? (
-          <p>No manual events are pending review.</p>
-        ) : (
-          sortedEvents.map(event => (
+        {sortedEvents.map(event => (
             <div key={event.id} className="review-item">
               <div className="review-item-details">
                 <div className="detail-row"><span className="detail-label">Vehicle Type:</span><span className="detail-value type">{event.vehicle_type}</span></div>
-                <div className="detail-row"><span className="detail-label">Identifier:</span><span className="detail-value">{event.vehicle_identifier || 'N/A'}</span></div>
-                <div className="detail-row"><span className="detail-label">Start Time:</span><span className="detail-value">{formatTimestamp(event.start_timestamp)}</span></div>
+                <div className="detail-row"><span className="detail-label">Start Time:</span><span className="detail-value">{new Date(event.start_timestamp).toLocaleString()}</span></div>
                 <div className="detail-row"><span className="detail-label">Duration:</span><span className="detail-value">{((new Date(event.end_timestamp) - new Date(event.start_timestamp))/1000).toFixed(1)}s</span></div>
               </div>
               <div style={{display: "flex", gap: "10px"}}>
@@ -115,8 +98,7 @@ function ReviewTab({ onJumpTo }) {
                 <button onClick={() => handleReviewClick(event)} className="review-button">Review</button>
               </div>
             </div>
-          ))
-        )}
+        ))}
       </div>
     </div>
   );

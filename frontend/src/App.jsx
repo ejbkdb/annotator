@@ -1,4 +1,3 @@
-// frontend/src/App.jsx
 import React, { useState } from 'react';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
@@ -11,15 +10,19 @@ function App() {
   const [tabIndex, setTabIndex] = useState(0);
   const [jumpToData, setJumpToData] = useState(null);
 
+  // State is lifted here to persist across tab navigation.
+  const [selectedCollections, setSelectedCollections] = useState([]);
+  const [sensorOrder, setSensorOrder] = useState([]);
+
   const handleJumpTo = (data) => {
     setJumpToData(data);
-    setTabIndex(1); // Switch to the "File-based Annotation" tab
+    setTabIndex(1); // Switch to the File-based Annotation tab
   };
   
-  // --- MODIFIED: Clear jump data when user navigates away ---
   const handleTabSelect = (index) => {
-    if (index !== 1) {
-        setJumpToData(null);
+    // Prevent stale review sessions if the user navigates away manually.
+    if (index !== 1 && jumpToData) {
+      setJumpToData(null);
     }
     setTabIndex(index);
   }
@@ -40,7 +43,14 @@ function App() {
         </TabPanel>
         <TabPanel>
           <div className="content-container file-based-container">
-            <FileAnnotationTab jumpToData={jumpToData} />
+            {/* The persistent state is now passed down as props. */}
+            <FileAnnotationTab 
+              jumpToData={jumpToData}
+              selectedCollections={selectedCollections}
+              setSelectedCollections={setSelectedCollections}
+              sensorOrder={sensorOrder}
+              setSensorOrder={setSensorOrder}
+            />
           </div>
         </TabPanel>
         <TabPanel>

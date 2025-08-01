@@ -1,76 +1,72 @@
-// frontend/src/components/FileAnnotationTab.jsx
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import IngestionView from './IngestionView';
 import AnnotationWorkspace from './AnnotationWorkspace';
 import ReviewSessionControls from './ReviewSessionControls';
 
-// --- NEW: Define the preferred default collection here ---
-const PREFERRED_DEFAULT_COLLECTION = 'l1_moth_no_foam';
-
-function FileAnnotationTab({ jumpToData }) {
+function FileAnnotationTab({ 
+  jumpToData,
+  selectedCollections,
+  setSelectedCollections,
+  sensorOrder,
+  setSensorOrder
+}) {
   const [collections, setCollections] = useState([]);
-  const [selectedCollection, setSelectedCollection] = useState('');
-  const [view, setView] = useState('ingestion');
-  
+  const [view, setView] = useState('workspace');
   const [activeReviewEvent, setActiveReviewEvent] = useState(null);
-
-  const fetchCollections = async () => {
-    try {
-      const response = await axios.get('/api/audio/collections');
-      const fetchedCollections = response.data;
-      setCollections(fetchedCollections);
-
-      if (fetchedCollections.length > 0) {
-        setView('workspace');
-        // --- MODIFIED: Logic to set the selected collection ---
-        if (!selectedCollection) {
-          // Check if the preferred default exists in the fetched list
-          if (fetchedCollections.includes(PREFERRED_DEFAULT_COLLECTION)) {
-            setSelectedCollection(PREFERRED_DEFAULT_COLLECTION);
-          } else {
-            // Fallback to the first item if the preferred one isn't found
-            setSelectedCollection(fetchedCollections[0]);
-          }
-        }
-      } else {
-        setView('ingestion');
-      }
-    } catch (error) {
-      console.error("Failed to fetch collections:", error);
-    }
-  };
+  const [preReviewSelection, setPreReviewSelection] = useState(null);
 
   useEffect(() => {
+    const fetchCollections = async () => {
+      try {
+        const { data: fetchedCollections } = await axios.get('/api/audio/collections');
+        setCollections(fetchedCollections);
+
+        if (fetchedCollections.length > 0) {
+          setView('workspace');
+          
+          // CRITICAL FIX: Robustly merge and de-duplicate the sensor order.
+          // This prevents duplicate entries from ever being added to the state.
+          setSensorOrder(prevOrder => {
+            const combined = [...prevOrder, ...fetchedCollections];
+            const unique = Array.from(new Set(combined));
+            // Ensure any sensors that were removed from the backend are also removed from the order.
+            return unique.filter(sensor => fetchedCollections.includes(sensor));
+          });
+
+        } else {
+          setView('ingestion');
+        }
+      } catch (error) {
+        console.error("Failed to fetch collections:", error);
+      }
+    };
     fetchCollections();
-  }, []);
+  }, []); // This effect should only run once on component mount.
 
   useEffect(() => {
     if (jumpToData) {
-      setView('workspace');
-      setSelectedCollection(jumpToData.collection);
+      setPreReviewSelection(selectedCollections);
+      setSelectedCollections([jumpToData.collection]);
       setActiveReviewEvent(jumpToData.sourceEvent);
+      setSensorOrder(prev => [jumpToData.collection, ...prev.filter(s => s !== jumpToData.collection)]);
     }
   }, [jumpToData]);
 
-  const handleIngestionComplete = (newCollectionName) => {
-    fetchCollections();
-    setSelectedCollection(newCollectionName);
-    setView('workspace');
+  const handleEndReview = () => {
+    if (preReviewSelection !== null) {
+      setSelectedCollections(preReviewSelection);
+    }
+    setPreReviewSelection(null);
+    setActiveReviewEvent(null);
   };
 
-  const handleEndReview = async () => {
-    if (!activeReviewEvent) return;
-    try {
-      // This logic should be reviewed. If all children are created, the parent is already 'reviewed'.
-      // This button might be better as just "End Session" that clears the state.
-      // For now, we'll leave the original PUT request but it might be redundant.
-      await axios.put(`/api/events/${activeReviewEvent.id}/status`, { status: 'reviewed' });
-      setActiveReviewEvent(null);
-    } catch (error) {
-      alert(`Error: Could not mark event ${activeReviewEvent.id} as reviewed.`);
-      console.error(error);
+  const handleIngestionComplete = (newCollectionName) => {
+    setCollections(prev => Array.from(new Set([...prev, newCollectionName])));
+    if (!selectedCollections.includes(newCollectionName)) {
+      setSelectedCollections(prev => [...prev, newCollectionName]);
     }
+    setView('workspace');
   };
 
   return (
@@ -82,14 +78,17 @@ function FileAnnotationTab({ jumpToData }) {
         />
       )}
       
-      {view === 'ingestion' && <IngestionView onIngestionComplete={handleIngestionComplete} />}
-      {view === 'workspace' && (
+      {view === 'ingestion' ? (
+        <IngestionView onIngestionComplete={handleIngestionComplete} />
+      ) : (
         <AnnotationWorkspace
           collections={collections}
-          selectedCollection={selectedCollection}
-          setSelectedCollection={setSelectedCollection}
+          selectedCollections={selectedCollections}
+          setSelectedCollections={setSelectedCollections}
+          sensorOrder={sensorOrder}
+          setSensorOrder={setSensorOrder}
           jumpToData={jumpToData}
-          activeReviewEvent={activeReviewEvent} 
+          activeReviewEvent={activeReviewEvent}
         />
       )}
       <button onClick={() => setView(view === 'ingestion' ? 'workspace' : 'ingestion')} style={{marginTop: '20px', flexShrink: 0}}>

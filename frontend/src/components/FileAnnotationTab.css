@@ -1,0 +1,198 @@
+/* frontend/src/components/AnnotationWorkspace.css */
+
+.workspace-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: 100%; 
+  box-sizing: border-box;
+}
+
+.workspace-container > .workspace-controls,
+.workspace-container > .time-controls-panel,
+.workspace-container > .selection-prompt,
+.workspace-container > .annotation-form,
+.workspace-container > div:has(> .TimeSeriesChart),
+.workspace-container > div:has(> .loading-message) {
+  flex-shrink: 0;
+}
+
+.workspace-container .event-log-container {
+  flex-grow: 1;
+  overflow-y: auto; 
+  min-height: 100px;
+  padding: 15px;
+  border-top: 1px solid #444;
+  margin-top: 20px;
+}
+
+.time-controls-panel {
+  padding: 15px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  background-color: #20232a;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.control-label {
+  font-weight: bold;
+  color: #ccc;
+}
+
+.button-tabs {
+  display: flex;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #555;
+}
+
+.tab-button {
+  padding: 8px 16px;
+  background-color: #3a3f4a;
+  color: white;
+  border: none;
+  cursor: pointer;
+  border-left: 1px solid #555;
+}
+.tab-button:first-child {
+  border-left: none;
+}
+.tab-button.selected {
+  background-color: #61dafb;
+  color: #20232a;
+  font-weight: bold;
+}
+.nav-button {
+  padding: 8px 16px;
+  font-weight: bold;
+  background-color: #2a9d8f;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.start-time-input {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.selection-prompt {
+  text-align: center;
+  padding: 10px;
+  background-color: #3a3f4a;
+  color: #61dafb;
+  font-weight: bold;
+}
+.link-button {
+  background: none;
+  border: none;
+  color: #e76f51;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 1em;
+}
+.annotation-form {
+  padding: 15px;
+  border: 1px solid #61dafb;
+  border-radius: 6px;
+  background-color: #20232a;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.annotation-form h4, .annotation-form p {
+  margin: 0;
+}
+.annotation-form select,
+.annotation-form input,
+.annotation-form textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background-color: #3a3f4a;
+  color: white;
+  font-size: 1em;
+  box-sizing: border-box;
+}
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+.form-actions button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: bold;
+}
+.form-actions .save-button {
+  background-color: #2a9d8f;
+  color: white;
+}
+
+/* --- NEW MULTI-SENSOR STYLES --- */
+.multi-sensor-view {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.sensor-plot-container {
+  border: 1px solid #444;
+  border-radius: 6px;
+  background-color: #282c34;
+  display: flex;
+  flex-direction: column;
+}
+.sensor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background-color: #3a3f4a;
+  border-bottom: 1px solid #444;
+}
+.sensor-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sensor-title h3 {
+  margin: 0;
+  font-size: 1.1em;
+}
+.sensor-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.sensor-id-badge {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.8em;
+  color: #999;
+}
+.sensor-error {
+  color: #e76f51;
+  font-size: 0.9em;
+}
+.no-data-message {
+  height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+}
