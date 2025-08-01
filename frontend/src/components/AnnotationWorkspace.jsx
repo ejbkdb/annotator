@@ -10,6 +10,7 @@ const DURATION_OPTIONS = [5, 10, 20, 50, 100];
 const FIXED_WINDOW_OPTIONS = [5, 8, 10];
 const defaultAnnotationState = { vehicle_type: '', location: 'tarmac', action: 'driveby', direction: 'na', annotator_notes: '' };
 
+// --- No change to helper functions ---
 const generateSensorColor = (name) => {
     const colors = ['#61dafb', '#2a9d8f', '#e76f51', '#f4a261', '#e9c46a', '#264653', '#9b59b6', '#3498db', '#95a5a6', '#e67e22'];
     let hash = 0;
@@ -19,10 +20,12 @@ const generateSensorColor = (name) => {
 
 const getSensorDisplayName = (id) => id.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 
+
 function AnnotationWorkspace({ 
   collections, selectedCollections, setSelectedCollections,
   sensorOrder, setSensorOrder, jumpToData, activeReviewEvent, onEndReview
 }) {
+  // --- No change to state declarations ---
   const [refinedAnnotations, setRefinedAnnotations] = useState([]);
   const [vehicleConfigs, setVehicleConfigs] = useState([]);
   const [chartData, setChartData] = useState({});
@@ -34,10 +37,14 @@ function AnnotationWorkspace({
   const [selectionMode, setSelectionMode] = useState('manual');
   const [fixedWindowSize, setFixedWindowSize] = useState(8);
   const [isSelecting, setIsSelecting] = useState('');
-  
-  // --- REFACTORED: Single state for the global annotation form ---
   const [globalAnnotation, setGlobalAnnotation] = useState(defaultAnnotationState);
+  
+  // --- MODIFICATION START ---
+  // Add state to manage the currently playing audio to prevent overlap
+  const [activeAudio, setActiveAudio] = useState(null);
+  // --- MODIFICATION END ---
 
+  // --- No change to hooks (useEffect, useCallback) ---
   const fetchRefinedAnnotations = useCallback(() => {
     if (activeReviewEvent?.id) {
         axios.get('/api/annotations/refined', { params: { parent_event_id: activeReviewEvent.id } })
@@ -58,7 +65,6 @@ function AnnotationWorkspace({
         setStartTime(jumpToData.startTime);
         setDurationSecs(jumpToData.durationSecs);
         setSelectionRange({});
-        // Pre-fill the global form with the vehicle type from the review event
         setGlobalAnnotation({ ...defaultAnnotationState, vehicle_type: jumpToData.sourceEvent?.vehicle_type || '' });
     }
   }, [jumpToData]);
@@ -85,7 +91,8 @@ function AnnotationWorkspace({
     };
     fetchAllWaveforms();
   }, [selectedCollections, startTime, durationSecs]);
-
+  
+  // --- No change to event handlers (handleChartClick, etc.) until the new one ---
   const handleChartClick = (timestamp, sensorId) => {
     const clickedDate = parseISOString(timestamp);
     if (selectionMode === 'fixed') {
@@ -125,10 +132,8 @@ function AnnotationWorkspace({
 
     try {
         await Promise.all(promises);
-        fetchRefinedAnnotations(); // Refresh the log
-        setSelectionRange({}); // Clear all selections
-        // Optionally reset form, or keep it for next annotation
-        // setGlobalAnnotation(defaultAnnotationState); 
+        fetchRefinedAnnotations();
+        setSelectionRange({});
     } catch (err) {
         alert(`Failed to save one or more annotations: ${err.response?.data?.detail || err.message}`);
     }
@@ -144,6 +149,49 @@ function AnnotationWorkspace({
     setStartTime(new Date(startTime.getTime() + (direction === 'next' ? 1 : -1) * durationSecs * 1000));
   };
   
+  // --- MODIFICATION START ---
+  const handleListenToSelection = async (sensorId) => {
+    const selection = selectionRange[sensorId];
+    if (!selection || !selection.start || !selection.end) return;
+
+    // If another audio clip is currently playing, stop it first.
+    if (activeAudio) {
+      activeAudio.pause();
+    }
+
+    try {
+      const response = await axios.get('/api/audio/raw', {
+        params: {
+          collection: sensorId,
+          start: selection.start.toISOString(),
+          end: selection.end.toISOString(),
+        },
+        // This is crucial for handling audio data
+        responseType: 'blob',
+      });
+
+      // Create a temporary URL for the audio blob
+      const audioUrl = URL.createObjectURL(response.data);
+      const audio = new Audio(audioUrl);
+      
+      // Store the new audio object and play it
+      setActiveAudio(audio);
+      audio.play();
+
+      // Clean up the blob URL after the audio finishes playing
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        setActiveAudio(null);
+      };
+
+    } catch (error) {
+      console.error(`Failed to fetch or play audio for ${sensorId}:`, error);
+      alert(`Could not play audio clip. See console for details.`);
+      setActiveAudio(null);
+    }
+  };
+  // --- MODIFICATION END ---
+
   const uniqueSortedSelectedCollections = useMemo(() => {
     return Array.from(new Set(selectedCollections)).sort((a, b) => sensorOrder.indexOf(a) - sensorOrder.indexOf(b));
   }, [selectedCollections, sensorOrder]);
@@ -166,7 +214,19 @@ function AnnotationWorkspace({
                 <div className="sensor-color-dot" style={{ backgroundColor: generateSensorColor(sensorId) }}></div>
                 <h3>{getSensorDisplayName(sensorId)}</h3>
               </div>
-              {errors[sensorId] && <div className="sensor-error">⚠️ {errors[sensorId]}</div>}
+              {/* --- MODIFICATION START --- */}
+              <div className="sensor-header-controls">
+                {errors[sensorId] && <div className="sensor-error">⚠️ {errors[sensorId]}</div>}
+                <button 
+                  className="listen-button"
+                  onClick={() => handleListenToSelection(sensorId)}
+                  disabled={!selectionRange[sensorId]?.end}
+                  title={selectionRange[sensorId]?.end ? "Listen to selected range" : "Make a full selection to listen"}
+                >
+                  Listen
+                </button>
+              </div>
+              {/* --- MODIFICATION END --- */}
             </div>
             {(chartData[sensorId] && chartData[sensorId].length > 0) ? (
               <TimeSeriesChart 
@@ -184,7 +244,6 @@ function AnnotationWorkspace({
 
       {isSelecting && <div className="selection-prompt">Click a second point on the <strong>{getSensorDisplayName(isSelecting)}</strong> chart to complete the selection... (or <button className="link-button" onClick={() => setIsSelecting('')}>Cancel</button>)</div>}
 
-      {/* --- REFACTORED: Single Global Annotation Form --- */}
       <div className="global-annotation-container">
         <div className="global-form-header">
             <h3>Step 2: Describe the Event for All Selections</h3>

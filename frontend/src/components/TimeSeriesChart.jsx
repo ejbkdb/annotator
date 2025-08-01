@@ -60,11 +60,23 @@ const TimeSeriesChart = ({ chartData, onChartClick, onChartHover, selection, col
             onChartHover(chartData[elements[0].index].time);
         }
     },
-    onClick: (event, elements) => {
+    // --- MODIFICATION START ---
+    // The onClick handler is changed to be more forgiving.
+    onClick: function(event) {
+        // 'this' refers to the Chart instance. We use a standard function
+        // to preserve this context, instead of an arrow function.
+        const chart = this;
+        
+        // Find the nearest element on the X-axis without requiring a direct hit.
+        // The `{ intersect: false }` option is the key to this behavior.
+        const elements = chart.getElementsAtEventForMode(event, 'nearest', { intersect: false }, true);
+
+        // If an element is found, trigger the callback with its timestamp.
         if (elements.length > 0 && chartData[elements[0].index]) {
             onChartClick(chartData[elements[0].index].time);
         }
     },
+    // --- MODIFICATION END ---
     plugins: {
       legend: { display: false }, tooltip: { enabled: false },
       annotation: {
@@ -80,7 +92,21 @@ const TimeSeriesChart = ({ chartData, onChartClick, onChartHover, selection, col
       }
     },
     scales: {
-      x: { ticks: { color: '#999', maxRotation: 0, autoSkip: true, maxTicksLimit: 10 }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
+      x: { 
+        ticks: { 
+          color: '#999', 
+          maxRotation: 0, 
+          autoSkip: true, 
+          maxTicksLimit: 10,
+          // --- MINOR FIX: Ensure labels are parsed correctly for display ---
+          callback: function(value) {
+            // 'value' is the index, 'this.getLabelForValue' gets the actual label (ISO string)
+            const label = this.getLabelForValue(value);
+            return new Date(label).toLocaleTimeString();
+          }
+        }, 
+        grid: { color: 'rgba(255, 255, 255, 0.1)' } 
+      },
       y: { ticks: { color: '#999' }, grid: { color: 'rgba(255, 255, 255, 0.1)' } },
     },
   };
