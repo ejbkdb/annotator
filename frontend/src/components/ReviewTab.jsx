@@ -42,7 +42,14 @@ function ReviewTab({ onJumpTo }) {
         return alert(`Could not find a data collection for timestamp: ${event.start_timestamp}`);
       }
       
-      // Correctly calculate time range to restore functionality
+      // --- AUTOMATICALLY LOAD PINNED DATABASES ---
+      const pinnedJSON = localStorage.getItem('pinnedSensors');
+      const pinnedCollections = pinnedJSON ? JSON.parse(pinnedJSON) : [];
+      
+      // Create a unique list, ensuring the event's primary collection is included
+      const collectionsToLoad = Array.from(new Set([suggested_collection, ...pinnedCollections]));
+      // --- END OF CHANGE ---
+
       const paddingSecs = 10;
       const eventStart = new Date(event.start_timestamp);
       const eventEnd = new Date(event.end_timestamp);
@@ -51,7 +58,8 @@ function ReviewTab({ onJumpTo }) {
       const startTimeWithPadding = new Date(eventStart.getTime() - (paddingSecs / 2) * 1000);
 
       onJumpTo({ 
-        collection: suggested_collection, 
+        collection: suggested_collection, // Keep the primary collection for context
+        collectionsToLoad: collectionsToLoad, // Pass the full list to be loaded
         startTime: startTimeWithPadding, 
         durationSecs: windowDuration, 
         sourceEvent: event 
@@ -83,7 +91,7 @@ function ReviewTab({ onJumpTo }) {
           Sort: {sortOrder === 'desc' ? 'Newest First' : 'Oldest First'}
         </button>
       </div>
-      <p>Click 'Review' to load the event and associated sensor data. The list auto-refreshes.</p>
+      <p>Click 'Review' to load the event and associated sensor data, including your pinned databases. The list auto-refreshes.</p>
       
       <div className="review-list">
         {sortedEvents.map(event => (

@@ -25,12 +25,9 @@ function FileAnnotationTab({
         if (fetchedCollections.length > 0) {
           setView('workspace');
           
-          // CRITICAL FIX: Robustly merge and de-duplicate the sensor order.
-          // This prevents duplicate entries from ever being added to the state.
           setSensorOrder(prevOrder => {
             const combined = [...prevOrder, ...fetchedCollections];
             const unique = Array.from(new Set(combined));
-            // Ensure any sensors that were removed from the backend are also removed from the order.
             return unique.filter(sensor => fetchedCollections.includes(sensor));
           });
 
@@ -42,14 +39,25 @@ function FileAnnotationTab({
       }
     };
     fetchCollections();
-  }, []); // This effect should only run once on component mount.
+  }, []);
 
   useEffect(() => {
     if (jumpToData) {
       setPreReviewSelection(selectedCollections);
-      setSelectedCollections([jumpToData.collection]);
+      // --- USE THE FULL LIST OF COLLECTIONS FROM THE REVIEW TAB ---
+      if (jumpToData.collectionsToLoad) {
+        setSelectedCollections(jumpToData.collectionsToLoad);
+      } else {
+        setSelectedCollections([jumpToData.collection]);
+      }
+      
       setActiveReviewEvent(jumpToData.sourceEvent);
-      setSensorOrder(prev => [jumpToData.collection, ...prev.filter(s => s !== jumpToData.collection)]);
+      // Prioritize the display order based on the incoming list
+      setSensorOrder(prev => {
+        const newOrder = jumpToData.collectionsToLoad || [jumpToData.collection];
+        const combined = [...newOrder, ...prev];
+        return Array.from(new Set(combined));
+      });
     }
   }, [jumpToData]);
 

@@ -1,6 +1,30 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './SensorSelector.css';
 
+// Custom hook to manage state that persists in localStorage
+const usePersistentState = (key, defaultValue) => {
+  const [state, setState] = useState(() => {
+    try {
+      const storedValue = localStorage.getItem(key);
+      return storedValue ? JSON.parse(storedValue) : defaultValue;
+    } catch (error) {
+      console.error("Error reading from localStorage", error);
+      return defaultValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch (error) {
+      console.error("Error writing to localStorage", error);
+    }
+  }, [key, state]);
+
+  return [state, setState];
+};
+
+
 const generateSensorColor = (sensorName) => {
   const colors = [
     '#61dafb', '#2a9d8f', '#e76f51', '#f4a261', '#e9c46a', 
@@ -25,6 +49,8 @@ function SensorSelector({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [draggedItem, setDraggedItem] = useState(null);
+  // Use the persistent state hook for pinned sensors
+  const [pinnedSensors, setPinnedSensors] = usePersistentState('pinnedSensors', []);
   const dropdownRef = useRef(null);
 
   useEffect(() => {
@@ -56,6 +82,19 @@ function SensorSelector({
       return orderedSelection;
     });
   };
+
+  const handlePinToggle = (sensorId, e) => {
+    e.stopPropagation(); // Prevent the dropdown from closing
+    setPinnedSensors(prev => {
+        const newPinned = new Set(prev);
+        if (newPinned.has(sensorId)) {
+            newPinned.delete(sensorId);
+        } else {
+            newPinned.add(sensorId);
+        }
+        return Array.from(newPinned);
+    });
+  };
   
   const handleDrop = (e, targetSensorId) => {
     e.preventDefault();
@@ -79,11 +118,10 @@ function SensorSelector({
   return (
     <div className="sensor-selector-container" ref={dropdownRef}>
       <div className="sensor-selector-header">
-        <h3>Select Data Sensors</h3>
+        <h3>Select Data Sensors (Pinned: {pinnedSensors.length})</h3>
         <div className="sensor-selector-controls">
-          {/* CORRECTED: Use functional update to guarantee state integrity */}
+          <button onClick={() => setSelectedCollections(pinnedSensors)} className="control-button" disabled={pinnedSensors.length === 0}>Load Pinned</button>
           <button onClick={() => setSelectedCollections(() => [])} className="control-button clear" disabled={selectedCount === 0}>Clear</button>
-          {/* CORRECTED: Use a Set to merge and de-duplicate, preventing race conditions */}
           <button
             onClick={() =>
               setSelectedCollections(prev => {
@@ -143,6 +181,14 @@ function SensorSelector({
                     </div>
                   </div>
                 </label>
+                {/* --- PINNING UI --- */}
+                <button 
+                    className="pin-button" 
+                    title={pinnedSensors.includes(sensorId) ? "Unpin Sensor" : "Pin Sensor"}
+                    onClick={(e) => handlePinToggle(sensorId, e)}
+                >
+                    {pinnedSensors.includes(sensorId) ? '★' : '☆'}
+                </button>
                 <div className="order-number">#{index + 1}</div>
               </div>
             ))}
@@ -152,5 +198,28 @@ function SensorSelector({
     </div>
   );
 }
+
+// Add some basic styling for the new pin button
+const style = document.createElement('style');
+style.innerHTML = `
+.sensor-item {
+    display: flex;
+    align-items: center;
+}
+.pin-button {
+    background: none;
+    border: none;
+    color: #f4a261;
+    cursor: pointer;
+    font-size: 1.5rem;
+    margin-left: auto;
+    padding: 0 10px;
+    order: 1; /* Ensure it comes before the order number */
+}
+.order-number {
+    order: 2;
+}
+`;
+document.head.appendChild(style);
 
 export default SensorSelector;
