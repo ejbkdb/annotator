@@ -11,3 +11,4 @@ event_clips/
 flac_dataset/
 analysis_plots/
 *.tar.gz
+*f2p*.txt
