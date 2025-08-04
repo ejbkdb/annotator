@@ -1,3 +1,4 @@
+/* frontend/src/components/SensorSelector.css */
 .sensor-selector-container {
   position: relative;
   padding: 15px;
@@ -39,6 +40,21 @@
   font-size: 0.9em;
   font-weight: normal;
 }
+/* --- FIX: Styles for the hidden/unavailable pinned count --- */
+.hidden-pinned-count {
+  color: #e76f51; /* Use a warning color */
+  font-style: italic;
+}
+.control-button.clear-unavailable {
+  background-color: #e76f51;
+  border-color: #fca089;
+  font-size: 0.8em;
+  padding: 4px 8px;
+}
+.control-button.clear-unavailable:hover {
+  background-color: #d66a4a;
+}
+/* --- End of FIX --- */
 .sensor-selector-controls { display: flex; gap: 8px; }
 .control-button {
   padding: 6px 12px; border: 1px solid #555; border-radius: 4px; background-color: #3a3f4a;

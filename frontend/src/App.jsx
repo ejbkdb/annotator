@@ -1,3 +1,4 @@
+// frontend/src/App.jsx
 import React, { useState } from 'react';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
@@ -19,6 +20,11 @@ function App() {
     setTabIndex(1); // Switch to the File-based Annotation tab
   };
   
+  // --- FIX: Add a function to clear the jumpToData state after it's been used ---
+  const handleJumpConsumed = () => {
+    setJumpToData(null);
+  };
+
   const handleTabSelect = (index) => {
     // Prevent stale review sessions if the user navigates away manually.
     if (index !== 1 && jumpToData) {
@@ -46,6 +52,8 @@ function App() {
             {/* The persistent state is now passed down as props. */}
             <FileAnnotationTab 
               jumpToData={jumpToData}
+              // --- FIX: Pass the new handler down ---
+              onJumpConsumed={handleJumpConsumed}
               selectedCollections={selectedCollections}
               setSelectedCollections={setSelectedCollections}
               sensorOrder={sensorOrder}

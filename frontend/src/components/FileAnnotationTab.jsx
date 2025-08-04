@@ -1,3 +1,4 @@
+// frontend/src/components/FileAnnotationTab.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import IngestionView from './IngestionView';
@@ -5,6 +6,8 @@ import AnnotationWorkspace from './AnnotationWorkspace';
 
 function FileAnnotationTab({
   jumpToData,
+  // --- FIX: Receive the new handler prop ---
+  onJumpConsumed,
   selectedCollections,
   setSelectedCollections,
   sensorOrder,
@@ -45,12 +48,16 @@ function FileAnnotationTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); 
 
-  // This effect triggers when a review session is started from another tab.
+  // --- FIX: This effect is now corrected to consume the jumpToData state only once ---
   useEffect(() => {
     // Only act if jumpToData has a value.
     if (jumpToData) {
       // 1. Save the current sensor selection to restore it later.
-      setPreReviewSelection(selectedCollections);
+      // Note: We check if it's not an empty array to avoid saving a blank state
+      // over a meaningful one if the user jumps immediately.
+      if (selectedCollections.length > 0) {
+        setPreReviewSelection(selectedCollections);
+      }
       
       // 2. Set the selected collections for the review session.
       if (jumpToData.collectionsToLoad) {
@@ -69,11 +76,15 @@ function FileAnnotationTab({
         const combined = [...newOrder, ...prev];
         return Array.from(new Set(combined));
       });
+      
+      // 5. CRITICAL FIX: Signal that the jump data has been consumed.
+      onJumpConsumed();
     }
-  // This effect must depend on `jumpToData` as its primary trigger.
-  // It also uses `selectedCollections` and calls the stable state setters,
-  // which are included to satisfy the rules of hooks and prevent stale state.
-  }, [jumpToData, selectedCollections, setSelectedCollections, setSensorOrder]);
+  // This effect now only depends on `jumpToData`. When it becomes null, the effect
+  // does nothing. When it gets a value, it runs and then the value is cleared by the parent.
+  // The other dependencies are stable setters or props that don't need to trigger this.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jumpToData]);
 
   // This function is passed down to end the review session.
   const handleEndReview = useCallback(() => {

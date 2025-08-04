@@ -1,3 +1,4 @@
+// frontend/src/components/SensorSelector.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import './SensorSelector.css';
 
@@ -102,6 +103,16 @@ function SensorSelector({
     setDraggedItem(null);
   };
 
+  // --- FIX: Logic to handle visible and hidden pinned sensors ---
+  const visiblePinnedSensors = pinnedSensors.filter(p => allCollections.includes(p));
+  const hiddenPinnedCount = pinnedSensors.length - visiblePinnedSensors.length;
+
+  const handleClearUnavailablePinned = () => {
+    if (window.confirm(`This will remove ${hiddenPinnedCount} pinned sensor(s) that are no longer available. Are you sure?`)) {
+        setPinnedSensors(visiblePinnedSensors);
+    }
+  };
+
   const getSensorDisplayName = (sensorId) => sensorId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   const selectedCount = selectedCollections.length;
   const totalCount = allCollections.length;
@@ -111,7 +122,21 @@ function SensorSelector({
       <div className="sensor-selector-header">
         <div className="header-left">
             <button className={`collapse-toggle ${isCollapsed ? 'collapsed' : ''}`} onClick={() => setIsCollapsed(!isCollapsed)}>▼</button>
-            <h3>Select Data Sensors <span className="pinned-count">(Pinned: {pinnedSensors.length})</span></h3>
+            <h3>Select Data Sensors 
+                {/* --- FIX: Updated pinned count display --- */}
+                <span className="pinned-count">
+                    (Pinned: {visiblePinnedSensors.length}
+                    {hiddenPinnedCount > 0 && 
+                        <span className="hidden-pinned-count">, {hiddenPinnedCount} unavailable</span>
+                    })
+                </span>
+            </h3>
+            {/* --- FIX: Add button to clear unavailable sensors --- */}
+            {hiddenPinnedCount > 0 && (
+                <button onClick={handleClearUnavailablePinned} className="control-button clear-unavailable" title="Remove unavailable sensors from pinned list">
+                    Clean Up
+                </button>
+            )}
         </div>
         <div className="sensor-selector-controls">
           <button onClick={() => setSelectedCollections(pinnedSensors)} className="control-button" disabled={pinnedSensors.length === 0}>Load Pinned</button>
