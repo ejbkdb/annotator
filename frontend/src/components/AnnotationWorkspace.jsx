@@ -202,9 +202,55 @@ function AnnotationWorkspace({
     <div className="workspace-container">
       <SensorSelector allCollections={collections} selectedCollections={selectedCollections} setSelectedCollections={setSelectedCollections} sensorOrder={sensorOrder} setSensorOrder={setSensorOrder} />
       
+      {/* --- CODE RESTORED START --- */}
       <div className={`main-controls-panel ${activeReviewEvent ? 'review-mode' : ''}`}>
-        {/* ... (control panel JSX is unchanged) ... */}
+        <div className="controls-left">
+            <div className="control-group">
+                <span className="control-label">Window:</span>
+                <div className="button-tabs">
+                    {DURATION_OPTIONS.map(d => (
+                        <button key={d} className={`tab-button ${d === durationSecs ? 'selected' : ''}`} onClick={() => setDurationSecs(d)}>{d}s</button>
+                    ))}
+                </div>
+            </div>
+            <div className="control-group">
+                <span className="control-label">Selection:</span>
+                <div className="button-tabs">
+                    <button className={`tab-button ${selectionMode === 'manual' ? 'selected' : ''}`} onClick={() => setSelectionMode('manual')}>Manual</button>
+                    <button className={`tab-button ${selectionMode === 'fixed' ? 'selected' : ''}`} onClick={() => setSelectionMode('fixed')}>Fixed</button>
+                </div>
+            </div>
+            {selectionMode === 'fixed' && (
+                <div className="control-group">
+                    <div className="button-tabs">
+                        {FIXED_WINDOW_OPTIONS.map(d => (
+                            <button key={d} className={`tab-button ${d === fixedWindowSize ? 'selected' : ''}`} onClick={() => setFixedWindowSize(d)}>{d}s</button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+        
+        <div className="controls-center">
+            <div className="control-group">
+                <button className="nav-button" onClick={() => handleNavigate('prev')}>{'<<'}</button>
+                <input type="datetime-local" value={formatForInput(startTime)} onChange={(e) => setStartTime(new Date(e.target.value + 'Z'))} step="1"/>
+                <button className="nav-button" onClick={() => handleNavigate('next')}>{'>>'}</button>
+            </div>
+        </div>
+
+        {activeReviewEvent && (
+            <div className="controls-right">
+                <div className="review-info-text">
+                    <span>Reviewing:</span>
+                    <strong>{activeReviewEvent.vehicle_type}</strong>
+                    <span>from {new Date(activeReviewEvent.start_timestamp).toLocaleDateString()}</span>
+                </div>
+                <button onClick={onEndReview} className="end-review-button">Finish & Mark Complete</button>
+            </div>
+        )}
       </div>
+      {/* --- CODE RESTORED END --- */}
 
       <div className="multi-sensor-view-scrollable">
         {isLoading ? <div className="loading-message">Loading Chart Data...</div> : uniqueSortedSelectedCollections.map(sensorId => (
@@ -214,7 +260,6 @@ function AnnotationWorkspace({
                 <div className="sensor-color-dot" style={{ backgroundColor: generateSensorColor(sensorId) }}></div>
                 <h3>{getSensorDisplayName(sensorId)}</h3>
               </div>
-              {/* --- MODIFICATION START --- */}
               <div className="sensor-header-controls">
                 {errors[sensorId] && <div className="sensor-error">⚠️ {errors[sensorId]}</div>}
                 <button 
@@ -226,7 +271,6 @@ function AnnotationWorkspace({
                   Listen
                 </button>
               </div>
-              {/* --- MODIFICATION END --- */}
             </div>
             {(chartData[sensorId] && chartData[sensorId].length > 0) ? (
               <TimeSeriesChart 
