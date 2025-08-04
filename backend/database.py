@@ -4,6 +4,8 @@ from .models import Event
 from typing import Optional, List
 
 DATABASE_FILE = "/home/eborcherding/Documents/annotator/test_range_pb.db"
+DATABASE_FILE = "/home/eborcherding/Documents/florida/florida_v3/test_range.db"
+
 
 def init_db():
     conn = sqlite3.connect(DATABASE_FILE)

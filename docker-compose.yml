@@ -24,7 +24,8 @@ services:
     # This ensures your data is not lost when the container is stopped or removed.
     # The ':Z' flag is important for Podman on SELinux systems to handle permissions.
     volumes:
-      - ./questdb_data:/var/lib/questdb/db:Z
+      # - ./questdb_data:/var/lib/questdb/db:Z
+      - /mnt/data/questdb_data:/var/lib/questdb/db:Z
       
     # Set resource limits for the container.
     # This prevents the database from consuming all your system's memory.

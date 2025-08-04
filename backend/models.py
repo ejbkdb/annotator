@@ -1,4 +1,5 @@
 # backend/models.py
+# Pydantic Models for API validation and serialization (Used by the Basic API in main.py).
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
@@ -24,7 +25,6 @@ class VehicleConfig(BaseModel):
 class EventStatusUpdate(BaseModel):
     status: str = Field(..., pattern=r"^(manual|refined|reviewed)$")
 
-# --- MODIFIED: Add source_collection field ---
 class RefinedAnnotationPayload(BaseModel):
     parent_event_id: str
     source_collection: str
@@ -36,7 +36,6 @@ class RefinedAnnotationPayload(BaseModel):
     direction: str = Field(..., pattern=r"^(towards_de|towards_103|na)$")
     annotator_notes: Optional[str] = None
 
-# --- MODIFIED: Add source_collection field ---
 class RefinedAnnotation(RefinedAnnotationPayload):
     id: str
     vehicle_subclass: str

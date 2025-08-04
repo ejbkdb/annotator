@@ -124,3 +124,31 @@
   height: 320px; display: flex; align-items: center; justify-content: center; color: #888;
 }
 /* The .sensor-annotation-form style is no longer needed and has been removed */
+
+.sensor-header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.listen-button {
+  background-color: #f4a261; /* A distinct, secondary action color */
+  color: white;
+  border: none;
+  font-weight: bold;
+  padding: 6px 14px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s;
+  font-size: 0.9em;
+}
+
+.listen-button:hover:not(:disabled) {
+  background-color: #e76f51; /* A slightly darker shade on hover */
+}
+
+.listen-button:disabled {
+  background-color: #555;
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -5,9 +5,14 @@ uvicorn[standard]
 pydantic
 aiofiles
 python-dotenv
-influxdb-client[async]
+# Removed influxdb-client as we are using QuestDB
+# influxdb-client[async]
 librosa
 numpy
 python-multipart
 soundfile
-# backend/requirements.txt
+# IMPLEMENTATION: Added required dependencies for the real system
+psycopg2-binary  # For QuestDB PG wire connection (PostgreSQL protocol)
+questdb          # For QuestDB ILP (High-speed Ingestion)
+SQLAlchemy       # For advanced pipeline management (ORM)
+click            # For the advanced CLI
