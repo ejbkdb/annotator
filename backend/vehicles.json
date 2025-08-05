@@ -47,6 +47,12 @@
       "category": "Air",
       "subclass": "rotary"
     },
+        {
+      "id": "f250",
+      "displayName": "f250",
+      "category": "Ground",
+      "subclass": "medium_vehicle"
+    },
     {
       "id": "other",
       "displayName": "Other...",
