@@ -7,10 +7,9 @@ import './AnnotationWorkspace.css';
 import { parseISOString, formatForInput } from '../utils/time';
 
 const DURATION_OPTIONS = [5, 10, 20, 50, 100];
-const FIXED_WINDOW_OPTIONS = [5, 8, 10];
-const defaultAnnotationState = { vehicle_type: '', location: 'tarmac', action: 'driveby', direction: 'na', annotator_notes: '' };
+const FIXED_WINDOW_OPTIONS = [5, 8, 10, 15];
+const defaultAnnotationState = { vehicle_type: '', location: 'fastpass', action: 'driveby', direction: 'na', annotator_notes: '' };
 
-// --- No change to helper functions ---
 const generateSensorColor = (name) => {
     const colors = ['#61dafb', '#2a9d8f', '#e76f51', '#f4a261', '#e9c46a', '#264653', '#9b59b6', '#3498db', '#95a5a6', '#e67e22'];
     let hash = 0;
@@ -25,7 +24,6 @@ function AnnotationWorkspace({
   collections, selectedCollections, setSelectedCollections,
   sensorOrder, setSensorOrder, jumpToData, activeReviewEvent, onEndReview
 }) {
-  // --- No change to state declarations ---
   const [refinedAnnotations, setRefinedAnnotations] = useState([]);
   const [vehicleConfigs, setVehicleConfigs] = useState([]);
   const [chartData, setChartData] = useState({});
@@ -38,13 +36,8 @@ function AnnotationWorkspace({
   const [fixedWindowSize, setFixedWindowSize] = useState(8);
   const [isSelecting, setIsSelecting] = useState('');
   const [globalAnnotation, setGlobalAnnotation] = useState(defaultAnnotationState);
-  
-  // --- MODIFICATION START ---
-  // Add state to manage the currently playing audio to prevent overlap
   const [activeAudio, setActiveAudio] = useState(null);
-  // --- MODIFICATION END ---
 
-  // --- No change to hooks (useEffect, useCallback) ---
   const fetchRefinedAnnotations = useCallback(() => {
     if (activeReviewEvent?.id) {
         axios.get('/api/annotations/refined', { params: { parent_event_id: activeReviewEvent.id } })
@@ -92,7 +85,6 @@ function AnnotationWorkspace({
     fetchAllWaveforms();
   }, [selectedCollections, startTime, durationSecs]);
   
-  // --- No change to event handlers (handleChartClick, etc.) until the new one ---
   const handleChartClick = (timestamp, sensorId) => {
     const clickedDate = parseISOString(timestamp);
     if (selectionMode === 'fixed') {
@@ -149,12 +141,10 @@ function AnnotationWorkspace({
     setStartTime(new Date(startTime.getTime() + (direction === 'next' ? 1 : -1) * durationSecs * 1000));
   };
   
-  // --- MODIFICATION START ---
   const handleListenToSelection = async (sensorId) => {
     const selection = selectionRange[sensorId];
     if (!selection || !selection.start || !selection.end) return;
 
-    // If another audio clip is currently playing, stop it first.
     if (activeAudio) {
       activeAudio.pause();
     }
@@ -166,19 +156,15 @@ function AnnotationWorkspace({
           start: selection.start.toISOString(),
           end: selection.end.toISOString(),
         },
-        // This is crucial for handling audio data
         responseType: 'blob',
       });
 
-      // Create a temporary URL for the audio blob
       const audioUrl = URL.createObjectURL(response.data);
       const audio = new Audio(audioUrl);
       
-      // Store the new audio object and play it
       setActiveAudio(audio);
       audio.play();
 
-      // Clean up the blob URL after the audio finishes playing
       audio.onended = () => {
         URL.revokeObjectURL(audioUrl);
         setActiveAudio(null);
@@ -190,7 +176,6 @@ function AnnotationWorkspace({
       setActiveAudio(null);
     }
   };
-  // --- MODIFICATION END ---
 
   const uniqueSortedSelectedCollections = useMemo(() => {
     return Array.from(new Set(selectedCollections)).sort((a, b) => sensorOrder.indexOf(a) - sensorOrder.indexOf(b));
@@ -202,7 +187,6 @@ function AnnotationWorkspace({
     <div className="workspace-container">
       <SensorSelector allCollections={collections} selectedCollections={selectedCollections} setSelectedCollections={setSelectedCollections} sensorOrder={sensorOrder} setSensorOrder={setSensorOrder} />
       
-      {/* --- CODE RESTORED START --- */}
       <div className={`main-controls-panel ${activeReviewEvent ? 'review-mode' : ''}`}>
         <div className="controls-left">
             <div className="control-group">
@@ -239,18 +223,11 @@ function AnnotationWorkspace({
             </div>
         </div>
 
-        {activeReviewEvent && (
-            <div className="controls-right">
-                <div className="review-info-text">
-                    <span>Reviewing:</span>
-                    <strong>{activeReviewEvent.vehicle_type}</strong>
-                    <span>from {new Date(activeReviewEvent.start_timestamp).toLocaleDateString()}</span>
-                </div>
-                <button onClick={onEndReview} className="end-review-button">Finish & Mark Complete</button>
-            </div>
-        )}
+        {/* --- ADJUSTMENT --- 
+          The review banner UI that was here has been removed to prevent duplication.
+          The `ReviewSessionControls` component now handles this display.
+        /* --- END ADJUSTMENT --- */}
       </div>
-      {/* --- CODE RESTORED END --- */}
 
       <div className="multi-sensor-view-scrollable">
         {isLoading ? <div className="loading-message">Loading Chart Data...</div> : uniqueSortedSelectedCollections.map(sensorId => (
@@ -297,7 +274,7 @@ function AnnotationWorkspace({
             <select value={globalAnnotation.vehicle_type} onChange={(e) => handleGlobalFormChange('vehicle_type', e.target.value)}><option value="">-- Vehicle* --</option>{vehicleConfigs.map(v => <option key={v.id} value={v.id}>{v.displayName}</option>)}</select>
             <select value={globalAnnotation.location} onChange={(e) => handleGlobalFormChange('location', e.target.value)}><option value="tarmac">Tarmac</option><option value="fastpass">Fastpass</option><option value="jungle">Jungle</option></select>
             <select value={globalAnnotation.action} onChange={(e) => handleGlobalFormChange('action', e.target.value)}><option value="driveby">Driveby</option><option value="rev">Rev</option><option value="idle">Idle</option><option value="flying">Flying</option><option value="hover">Hover</option></select>
-            <select value={globalAnnotation.direction} onChange={(e) => handleGlobalFormChange('direction', e.target.value)}><option value="towards_de">Towards DE</option><option value="towards_103">Towards 103</option><option value="na">N/A</option></select>
+            <select value={globalAnnotation.direction} onChange={(e) => handleGlobalFormChange('direction', e.target.value)}><option value="towards_de">Towards DE</option><option value="towards_103">Towards 103</option><option value="na">N/A</option><option value="clockwise">clockwise</option><option value="counter-clockwise">counter-clockwise</option></select>
         </div>
         <textarea placeholder="Notes..." value={globalAnnotation.annotator_notes} onChange={(e) => handleGlobalFormChange('annotator_notes', e.target.value)} />
         <div className="form-actions">
