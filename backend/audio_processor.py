@@ -70,20 +70,10 @@ class AudioProcessor:
             raise
     
     def resample_audio(self, audio: np.ndarray, orig_sr: int, 
-                      target_sr: Optional[int] = None) -> np.ndarray:
+                    target_sr: int) -> np.ndarray:
         """
         Resample audio to target sample rate using high-quality resampling.
-        
-        Args:
-            audio: Audio samples
-            orig_sr: Original sample rate
-            target_sr: Target sample rate (uses self.target_sample_rate if None)
-            
-        Returns:
-            Resampled audio
         """
-        target_sr = target_sr or self.target_sample_rate
-        
         if orig_sr == target_sr:
             return audio
             
@@ -95,9 +85,9 @@ class AudioProcessor:
             return resampled
         except Exception as e:
             logger.error(f"Resampling failed: {str(e)}")
-            # Fallback to scipy
+            # Fallback to scipy/librosa
             return librosa.resample(audio, orig_sr=orig_sr, target_sr=target_sr)
-    
+        
     def apply_bandpass_filter(self, audio: np.ndarray, sample_rate: int,
                             low_freq: float = 20.0, 
                             high_freq: float = 20000.0) -> np.ndarray:

@@ -1,74 +1,133 @@
 # backend/data_exporter.py
+# Unified Data Export Engine
 import os
 import csv
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-from typing import Generator, Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Generator, Tuple
 import click
 import numpy as np
 import soundfile as sf
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, inspect, func
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
-from sqlalchemy import Column, String, DateTime, ForeignKey, Integer, Text
+from sqlalchemy import Column, String, DateTime, Integer
 
-from backend.pipeline_config import PipelineConfig, SensorGroup
-from backend import questdb_client
+# IMPLEMENTATION: Import new dependencies
+try:
+    # Use relative imports for package structure
+    from .export_config import ExportConfig, WindowingConfig, SensorGroup
+    from .audio_processor import AudioProcessor
+    from . import questdb_client
+    # Import SensorMetadata for sample rate lookup
+    from .models_sqlalchemy import SensorMetadata
+except ImportError:
+    # Fallback for different execution environments or if run standalone
+    print("Warning: Failed to perform relative imports. Attempting direct imports (if backend is in PYTHONPATH).")
+    try:
+        from backend.export_config import ExportConfig, WindowingConfig, SensorGroup
+        from backend.audio_processor import AudioProcessor
+        from backend import questdb_client
+        from backend.models_sqlalchemy import SensorMetadata
+    except ImportError as e:
+        print(f"Error: Missing required backend modules: {e}. Ensure backend package is correctly structured.")
+        # Define placeholders if imports fail completely, to allow script initialization
+        class ExportConfig: pass
+        class WindowingConfig: pass
+        class SensorGroup: pass
+        class SensorMetadata: pass
+        class AudioProcessor:
+            def resample_audio(self, *args): raise NotImplementedError("AudioProcessor unavailable")
+        questdb_client = None
 
-# --- SQLAlchemy ORM Models ---
-# Based on your project's schema to ensure type-safe and clear database interactions.
-Base = declarative_base()
-
-class Event(Base):
-    __tablename__ = 'events'
-    id = Column(String, primary_key=True)
-    start_timestamp = Column(DateTime, nullable=False)
-    end_timestamp = Column(DateTime, nullable=False)
-    vehicle_type = Column(String, nullable=False)
-    vehicle_identifier = Column(String)
-    direction = Column(String)
-    annotator_notes = Column(Text)
-    status = Column(String, nullable=False, default='manual')
-    convoy_id = Column(String, ForeignKey('convoys.id'))
-    vehicle_action = Column(String, default='driveby')
-
-class RefinedAnnotation(Base):
-    __tablename__ = 'refined_annotations'
-    id = Column(String, primary_key=True)
-    parent_event_id = Column(String, nullable=False)
-    source_collection = Column(String, nullable=False)
-    start_timestamp = Column(DateTime, nullable=False)
-    end_timestamp = Column(DateTime, nullable=False)
-    vehicle_type = Column(String, nullable=False)
-    vehicle_subclass = Column(String, nullable=False)
-    location = Column(String, nullable=False)
-    action = Column(String, nullable=False)
-    direction = Column(String, nullable=False)
-    annotator_notes = Column(Text)
-
-class Convoy(Base):
-    __tablename__ = 'convoys'
-    id = Column(String, primary_key=True)
-    convoy_number = Column(String, nullable=False)
-    direction = Column(String, nullable=False)
-    notes = Column(Text)
-    convoy_spacing_seconds = Column(Integer)
-    created_at = Column(DateTime, default=datetime.utcnow)
 
 # --- Configuration & Setup ---
-# Your existing database.py points to two different files. I'm using a generic name.
-# Ensure ANNOTATOR_DB_URL points to the correct one (e.g., test_range.db).
-DATABASE_URL = os.environ.get("ANNOTATOR_DB_URL", "sqlite:///./test_range.db")
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# Database setup (for annotations/events/metadata)
+DATABASE_URL = os.environ.get("ANNOTATOR_DB_URL", "sqlite:///./annotation_system.db")
+
+# Determine connection arguments based on DB type for SQLAlchemy
+connect_args = {}
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
+
+try:
+    engine = create_engine(DATABASE_URL, connect_args=connect_args)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+except Exception as e:
+    print(f"Warning: Could not initialize SQLAlchemy engine: {e}")
+    engine = None
+    SessionLocal = None
+
+# Set up the AudioProcessor instance for potential resampling
+try:
+    audio_processor = AudioProcessor()
+except Exception as e:
+    print(f"Warning: Could not initialize AudioProcessor: {e}")
+    audio_processor = None
+
+# --- SQLAlchemy ORM Models (Required for querying source tables) ---
+Base = declarative_base()
+
+# Define models explicitly for the known source tables. This provides robustness and clarity.
+
+class Event(Base):
+    # Represents the 'events' table (often used for single_vehicle and convoy sources)
+    __tablename__ = 'events'
+    __table_args__ = {'extend_existing': True} # Handle potential re-definition if modules are reloaded
+    id = Column(String, primary_key=True)
+    start_timestamp = Column(DateTime, nullable=False)
+    end_timestamp = Column(DateTime, nullable=False)
+    vehicle_type = Column(String)
+    vehicle_action = Column(String) # Specific to 'events' table
+    direction = Column(String)
+    convoy_id = Column(String)
+    status = Column(String)
+    # Note: 'events' table often lacks explicit sensor/location links in the basic schema
+
+class RefinedAnnotation(Base):
+    # Represents the 'refined_annotations' table (often used for model_training)
+    __tablename__ = 'refined_annotations'
+    __table_args__ = {'extend_existing': True}
+    id = Column(String, primary_key=True)
+    source_collection = Column(String, nullable=False) # Crucial link to sensor
+    start_timestamp = Column(DateTime, nullable=False)
+    end_timestamp = Column(DateTime, nullable=False)
+    vehicle_type = Column(String)
+    action = Column(String)
+    location = Column(String)
+    direction = Column(String)
+
+class Annotation(Base):
+    # Represents the advanced 'annotations' table (from models_sqlalchemy.py)
+    __tablename__ = 'annotations'
+    __table_args__ = {'extend_existing': True}
+    id = Column(String, primary_key=True)
+    sensor = Column(String, nullable=False) # Crucial link to sensor
+    start_timestamp = Column(DateTime, nullable=False)
+    end_timestamp = Column(DateTime, nullable=False)
+    vehicle_type = Column(String)
+    action = Column(String)
+    location = Column(String)
+    status = Column(String)
+
+
+# Mapping config names to SQLAlchemy models
+TABLE_MODEL_MAP = {
+    "refined_annotations": RefinedAnnotation,
+    "events": Event,
+    "annotations": Annotation
+}
+
+# --- Helper Functions ---
 
 def setup_logging(output_dir: Path, log_filename: str):
-    """Sets up logging to both console and a file in the output directory."""
+    """Sets up logging to both console and a file."""
     log_dir = output_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / log_filename
     
+    # Reset root logger handlers to prevent duplicate logs if run multiple times
     for handler in logging.root.handlers[:]:
         logging.root.removeHandler(handler)
 
@@ -81,245 +140,572 @@ def setup_logging(output_dir: Path, log_filename: str):
 
 def get_db_session() -> Session:
     """Provides a SQLAlchemy session."""
-    return SessionLocal()
+    if SessionLocal:
+        return SessionLocal()
+    raise RuntimeError("Database session factory (SessionLocal) is not initialized.")
 
 def sanitize_for_path(value: Any, fallback: str = 'unknown') -> str:
     """Sanitizes a string to be safe for a directory or filename."""
-    if not value or not isinstance(value, str):
+    if value is None:
         return fallback
-    return value.strip().replace(' ', '_').replace('/', '-').replace('\\', '-')
+    s_value = str(value).strip()
+    if not s_value:
+        return fallback
+    # Remove characters unsafe for most filesystems
+    return s_value.replace(' ', '_').replace('/', '-').replace('\\', '-').replace(':', '').replace('.', '_')
 
-def create_sensor_group_map(groups: List[SensorGroup]) -> Dict[str, List[str]]:
-    """Creates a lookup map from a collection to its sibling collections."""
-    collection_to_siblings = {}
+def create_group_maps(groups: List[SensorGroup]) -> tuple[Dict[str, str], Dict[str, SensorGroup]]:
+    """Creates lookup maps: sensor -> group_name and group_name -> group_object."""
+    sensor_to_group_name = {}
+    group_name_to_object = {}
     for group in groups:
+        group_name_to_object[group.name] = group
         for collection in group.collections:
-            siblings = [c for c in group.collections if c != collection]
-            collection_to_siblings[collection] = siblings
-    return collection_to_siblings
+            if collection in sensor_to_group_name:
+                logging.warning(f"Sensor '{collection}' appears in multiple groups. Using the last one defined ('{group.name}').")
+            sensor_to_group_name[collection] = group.name
+    return sensor_to_group_name, group_name_to_object
 
-def generate_windows(start_time: datetime, end_time: datetime, chunk_duration_s: float, overlap_s: float) -> Generator[tuple[datetime, datetime], None, None]:
-    """Yields start and end timestamps for each chunk, ensuring no overrun."""
-    step_s = chunk_duration_s - overlap_s
-    if step_s <= 0:
-        raise ValueError("Overlap must be less than chunk duration.")
+def generate_windows(start_time: datetime, end_time: datetime, window_config: WindowingConfig) -> Generator[tuple[datetime, datetime], None, None]:
+    """Yields start and end timestamps for each chunk, ensuring exact window size."""
+    chunk_duration_s = window_config.window_size_seconds
+    overlap_s = window_config.overlap_seconds
+    step_s = chunk_duration_s - overlap_s # Guaranteed > 0 by validation
+    
     current_start = start_time
     duration_delta = timedelta(seconds=chunk_duration_s)
     step_delta = timedelta(seconds=step_s)
+    
+    # Only yield windows that fit entirely within the event boundaries
     while current_start + duration_delta <= end_time:
         yield current_start, current_start + duration_delta
         current_start += step_delta
+
+def get_sensor_sample_rate(db: Session, collection_name: str) -> int:
+    """Retrieves the sample rate from metadata, falling back to a default if not found."""
+    DEFAULT_SR = 48000
+    try:
+        # Check if SensorMetadata is properly mapped and the table exists in the current engine context
+        if engine and inspect(engine).has_table(SensorMetadata.__tablename__):
+            metadata = db.query(SensorMetadata).filter_by(collection_name=collection_name).first()
+            if metadata and metadata.sample_rate:
+                return metadata.sample_rate
+    except Exception as e:
+        # Handle potential SQLAlchemy errors or reflection issues
+        logging.warning(f"Could not query SensorMetadata: {e}. Falling back to default.")
+
+    logging.info(f"Sample rate metadata unavailable for '{collection_name}'. Falling back to default: {DEFAULT_SR}Hz.")
+    return DEFAULT_SR
+
+def fetch_and_process_audio(db: Session, collection: str, start: datetime, end: datetime, target_sr_config: Optional[int]) -> Tuple[Optional[np.ndarray], int]:
+    """Fetches audio from QuestDB, determines sample rate, and optionally resamples it."""
+    if not questdb_client or not audio_processor:
+        logging.error("Missing required clients (QuestDB or AudioProcessor). Cannot fetch/process audio.")
+        return None, 0
+        
+    try:
+        # 1. Fetch raw data (questdb_client returns int16)
+        audio_data = questdb_client.query_raw_audio_data(collection, start.isoformat(), end.isoformat())
+        
+        if audio_data.size == 0:
+            return None, 0
+
+        # 2. Determine the original sample rate
+        original_sr = get_sensor_sample_rate(db, collection)
+        
+        # 3. Determine the target sample rate
+        final_sr = target_sr_config if target_sr_config else original_sr
+
+        # 4. Resample if necessary
+        if final_sr != original_sr:
+            logging.debug(f"Resampling '{collection}' from {original_sr}Hz to {final_sr}Hz.")
+            # AudioProcessor (resampy/librosa) expects float32. Convert int16 to float [-1.0, 1.0]
+            if audio_data.dtype == np.int16:
+                 # Divide by the maximum absolute value for 16-bit signed integer
+                 audio_float = audio_data.astype(np.float32) / 32768.0
+            else:
+                 # Handle other types if necessary, assume normalized float if not int16
+                 audio_float = audio_data.astype(np.float32)
+
+            resampled_audio = audio_processor.resample_audio(audio_float, original_sr, final_sr)
+            # The output of resampling is float32.
+            return resampled_audio, final_sr
+        
+        # If no resampling needed, return original data (int16) and SR
+        return audio_data, original_sr
+
+    except Exception as e:
+        logging.error(f"Failed to fetch or process audio for '{collection}' from {start} to {end}: {e}")
+        return None, 0
 
 def save_audio_clip(output_path: Path, audio_data: np.ndarray, sample_rate: int, format: str):
     """Saves a numpy audio array to a file."""
     try:
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Handle data types for saving.
+        if audio_data.dtype == np.float32 or audio_data.dtype == np.float64:
+             # If data is float (e.g., after resampling), ensure it's clipped before saving.
+             # Soundfile handles the conversion to PCM formats correctly from float.
+             audio_data = np.clip(audio_data, -1.0, 1.0)
+        
         sf.write(str(output_path), audio_data, samplerate=sample_rate, format=format.upper())
     except Exception as e:
         logging.error(f"Failed to write audio file to {output_path}: {e}")
         raise
 
-@click.group()
-def export():
-    """A unified CLI tool for exporting annotated audio data."""
-    pass
+# --- Unified Export Engine Implementation ---
 
-@export.command(name="model-training")
-@click.option('--config', 'config_path', required=True, type=click.Path(exists=True, dir_okay=False), help='Path to pipeline config for sensor groups and alignment.')
-@click.option('--output-dir', required=True, type=click.Path(file_okay=False), help='Directory to save exported data.')
-@click.option('--format', type=click.Choice(['flac', 'wav'], case_sensitive=False), default='flac', show_default=True)
-@click.option('--duration', type=float, required=True, help='Duration of each audio clip in seconds.')
-@click.option('--overlap', type=float, required=True, help='Overlap between clips in seconds.')
-def export_model_training(config_path: str, output_dir: str, format: str, duration: float, overlap: float):
-    """
-    Exports chunked audio from refined_annotations for model training.
+def run_export_job(config: ExportConfig):
+    """The central engine that executes the export job based on the configuration."""
+    output_base_dir = Path(config.output_config.base_directory)
+    # Ensure the directory exists
+    output_base_dir.mkdir(parents=True, exist_ok=True)
 
-    This command uses sensor group definitions to propagate a single annotation
-    across all sensors at the same location, creating a richer dataset.
-    """
-    output_path = Path(output_dir)
     run_id = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-    setup_logging(output_path, f"export_model_training_{run_id}.log")
+    setup_logging(output_base_dir, f"export_{config.export_job_name}_{run_id}.log")
     
-    logging.info("--- Starting Model Training Data Export (with Sensor Grouping) ---")
-    
+    logging.info(f"--- Starting Unified Export Job: {config.export_job_name} (Type: {config.export_type}) ---")
+
+    # 1. Initialize maps and database session
+    sensor_to_group_name, group_name_to_object = create_group_maps(config.groups)
     try:
-        config = PipelineConfig.from_json(config_path)
-        logging.info(f"Loaded pipeline config '{config.pipeline_id}'.")
-    except Exception as e:
-        logging.error(f"Failed to load or parse pipeline config: {e}")
+        db = get_db_session()
+    except RuntimeError as e:
+        logging.error(f"Failed to initialize database session: {e}")
         return
 
-    sensor_group_map = create_sensor_group_map(config.groups)
-    if not sensor_group_map:
-        logging.warning("No sensor groups defined in config. Will only export from explicitly annotated collections.")
-    else:
-        logging.info(f"Loaded {len(config.groups)} sensor groups for annotation propagation.")
+    # 2. Query Source Events
+    source_events = query_source_events(db, config)
+    if not source_events:
+        logging.info("No events found matching the source configuration. Exiting.")
+        db.close()
+        return
 
-    db = get_db_session()
-    annotations = db.query(RefinedAnnotation).order_by(RefinedAnnotation.start_timestamp).all()
-    logging.info(f"Found {len(annotations)} refined annotations to process.")
+    logging.info(f"Found {len(source_events)} source events (or aggregated convoys) to process.")
 
-    manifest_data = []
-    clips_created, clips_skipped = 0, 0
+    # 3. Initialize Manifest Writers
+    manifest_writers = {}
+    try:
+        manifest_writers = initialize_manifests(config, output_base_dir)
+    except Exception:
+        # Errors logged in initialize_manifests
+        db.close()
+        return
 
-    for ann in annotations:
-        ann_duration_s = (ann.end_timestamp - ann.start_timestamp).total_seconds()
+    # 4. Process Events
+    total_clips_created = 0
+    try:
+        for event in source_events:
+            clips_created = process_event(db, config, event, sensor_to_group_name, group_name_to_object, output_base_dir, manifest_writers)
+            total_clips_created += clips_created
+            # Commit periodically if managing large datasets, but for exports usually fine to commit at end or rely on autocommit/context manager if used.
+            # db.commit()
+            
+    except Exception as e:
+        logging.error(f"An unexpected error occurred during event processing: {e}", exc_info=True)
+    finally:
+        # 5. Finalize
+        close_manifests(manifest_writers)
+        logging.info(f"--- Export Job Complete. Total clips created: {total_clips_created} ---")
+        db.close()
+
+def query_source_events(db: Session, config: ExportConfig) -> List[Base]:
+    """Queries the appropriate SQLAlchemy model based on the configuration."""
+    SourceModel = TABLE_MODEL_MAP.get(config.source_config.database_table)
+    if not SourceModel:
+        logging.error(f"Invalid database table specified in config: {config.source_config.database_table}")
+        return []
         
-        if ann_duration_s < duration:
-            logging.warning(f"SKIPPING Annotation ID {ann.id[:8]} (on {ann.source_collection}): Duration ({ann_duration_s:.2f}s) < target ({duration}s).")
-            clips_skipped += 1
-            continue
+    # Check if the table actually exists in the database before querying
+    if engine and not inspect(engine).has_table(config.source_config.database_table):
+         logging.error(f"Source table '{config.source_config.database_table}' does not exist in the database.")
+         return []
 
-        annotated_collection = ann.source_collection
-        sibling_collections = sensor_group_map.get(annotated_collection, [])
-        collections_to_process = [annotated_collection] + sibling_collections
+    query = db.query(SourceModel)
 
-        if len(collections_to_process) > 1:
-            logging.info(f"Annotation {ann.id[:8]} on '{annotated_collection}' will be propagated to {len(sibling_collections)} other sensors.")
+    # Apply filters dynamically
+    filters = config.source_config.filters
+    if filters:
+        logging.info(f"Applying filters: {filters}")
+        filter_clauses = []
+        for key, value in filters.items():
+            if not hasattr(SourceModel, key):
+                logging.warning(f"Filter key '{key}' not found in model for table '{config.source_config.database_table}'. Skipping filter.")
+                continue
+            
+            column = getattr(SourceModel, key)
+            if value is None:
+                filter_clauses.append(column.is_(None))
+            elif isinstance(value, list):
+                filter_clauses.append(column.in_(value))
+            else:
+                filter_clauses.append(column == value)
+        
+        if filter_clauses:
+            query = query.filter(*filter_clauses)
 
-        for target_collection in collections_to_process:
-            for clip_start, clip_end in generate_windows(ann.start_timestamp, ann.end_timestamp, duration, overlap):
-                offset_ms = config.alignment.offsets.get(target_collection, 0)
-                time_delta = timedelta(milliseconds=offset_ms)
-                adjusted_start, adjusted_end = clip_start - time_delta, clip_end - time_delta
+    # Special handling for 'convoy' type: We need to aggregate event times.
+    if config.export_type == "convoy":
+        if SourceModel != Event:
+             logging.error("Convoy export type requires 'events' table as source.")
+             return []
+        # This function handles the aggregation logic
+        return aggregate_convoy_events(db, query)
 
-                try:
-                    audio_data = questdb_client.query_raw_audio_data(
-                        collection=target_collection,
-                        start=adjusted_start.isoformat(),
-                        end=adjusted_end.isoformat()
-                    )
-
-                    if audio_data.size == 0:
-                        logging.warning(f"No audio for annotation {ann.id[:8]} in target collection '{target_collection}' for window {clip_start.isoformat()}.")
-                        continue
-
-                    base_dir = output_path / "model_training_clips" / sanitize_for_path(ann.location) / sanitize_for_path(ann.vehicle_type) / sanitize_for_path(ann.action) / sanitize_for_path(ann.direction)
-                    ts_str = clip_start.strftime('%Y%m%dT%H%M%S%f')[:-3]
-                    clip_filename = f"{ann.id[:8]}_{target_collection}_{ts_str}.{format}"
-                    clip_output_path = base_dir / clip_filename
-
-                    save_audio_clip(clip_output_path, audio_data, config.processing.target_sample_rate, format)
-                    clips_created += 1
-
-                    manifest_data.append({
-                        "clip_path": str(clip_output_path.relative_to(output_path)),
-                        "source_annotation_id": ann.id,
-                        "annotated_collection": annotated_collection,
-                        "audio_source_collection": target_collection,
-                        "clip_start_utc": clip_start.isoformat(),
-                        "clip_end_utc": clip_end.isoformat(),
-                        "duration_s": duration, "vehicle_type": ann.vehicle_type,
-                        "vehicle_subclass": ann.vehicle_subclass, "action": ann.action,
-                        "location": ann.location, "direction": ann.direction,
-                    })
-                except Exception as e:
-                    logging.error(f"Failed to process clip for ann {ann.id[:8]} on target {target_collection}: {e}")
-
-    manifest_path = output_path / "manifest.csv"
-    if manifest_data:
-        logging.info(f"Writing {len(manifest_data)} entries to manifest: {manifest_path}")
-        with open(manifest_path, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=manifest_data[0].keys())
-            writer.writeheader()
-            writer.writerows(manifest_data)
+    # Ensure start_timestamp exists before ordering (it should for all mapped models)
+    if hasattr(SourceModel, 'start_timestamp'):
+        return query.order_by(SourceModel.start_timestamp).all()
     
-    logging.info(f"--- Model Training Export Complete ---")
-    logging.info(f"Clips Created: {clips_created} | Annotations Skipped: {clips_skipped}")
-    db.close()
+    # Should be unreachable due to TABLE_MODEL_MAP definitions
+    logging.error(f"Source model for '{config.source_config.database_table}' lacks 'start_timestamp'. Cannot proceed.")
+    return []
 
-# Note: The logic for single-vehicle and convoy exports remains unchanged as their purpose
-# is to extract raw time blocks, not propagate fine-grained annotations. They are included
-# here for completeness of the unified tool.
-def _export_event_or_convoy(db: Session, output_path: Path, format: str, chunked: bool, duration: Optional[float], overlap: Optional[float], start_time: datetime, end_time: datetime, metadata: Dict[str, Any], export_type: str, base_id: str):
-    """Shared logic to export audio for an event or convoy."""
-    all_collections = questdb_client.get_collections()
-    relevant_collections = [c for c in all_collections if questdb_client.check_data_exists(c, start_time.isoformat(), end_time.isoformat())]
-    if not relevant_collections:
-        logging.warning(f"No data found in any collection for {export_type} {base_id}. Skipping.")
-        return 0
-    logging.info(f"Found data in collections: {relevant_collections} for {export_type} {base_id}")
-    clips_created = 0
-    base_dir = (output_path / export_type / sanitize_for_path(metadata.get('location')) / sanitize_for_path(metadata.get('vehicle_type')) / sanitize_for_path(metadata.get('action')) / sanitize_for_path(metadata.get('direction')) / base_id[:8])
-    for collection in relevant_collections:
+def aggregate_convoy_events(db: Session, base_query: Any) -> List[Event]:
+    """Aggregates individual events belonging to the same convoy into a single encompassing event."""
+    
+    # We need to find the distinct convoy IDs present in the results of the base query (which includes filters).
+    # Create a subquery from the base query to filter for non-null convoy_ids
+    filtered_query = base_query.filter(Event.convoy_id.isnot(None))
+    
+    # Now, perform aggregation (MIN/MAX timestamp) grouped by convoy_id on the filtered query results.
+    # We query from the filtered results (using from_self() or by redefining the query base)
+    
+    # Redefining the query structure for aggregation:
+    aggregation_query = db.query(
+        Event.convoy_id,
+        func.min(Event.start_timestamp).label("start_timestamp"),
+        func.max(Event.end_timestamp).label("end_timestamp")
+    ).filter(Event.convoy_id.isnot(None))
+
+    # Re-apply filters from the base query to the aggregation query if necessary
+    # This part is tricky as filters might apply to individual events, not the aggregated convoy.
+    # For simplicity here, we assume filters in the config are meant to select which convoys to include.
+    # If complex filtering on event attributes is needed, the logic becomes more complex.
+    
+    # For now, we rely on the filters already applied in the config if they target 'convoy_id'.
+    # If other filters were applied (e.g., status), they should have been applied before aggregation.
+    
+    # If the base_query already has filters applied, we should ideally use its results.
+    # A more robust approach uses a subquery of the filtered events:
+    
+    # 1. Get IDs of events matching filters
+    event_ids = [e.id for e in base_query.filter(Event.convoy_id.isnot(None)).all()]
+    
+    if not event_ids:
+        return []
+
+    # 2. Aggregate based on those specific event IDs
+    aggregation_query = db.query(
+        Event.convoy_id,
+        func.min(Event.start_timestamp).label("start_timestamp"),
+        func.max(Event.end_timestamp).label("end_timestamp")
+    ).filter(Event.id.in_(event_ids)).group_by(Event.convoy_id)
+
+    results = aggregation_query.all()
+    
+    aggregated_events = []
+    for convoy_id, start_ts, end_ts in results:
+        if start_ts and end_ts:
+            # Create a synthetic Event object representing the whole convoy duration
+            # We treat the convoy itself as the "vehicle type" for organizational purposes
+            convoy_event = Event(
+                id=f"CONVOY_{convoy_id}",
+                start_timestamp=start_ts,
+                end_timestamp=end_ts,
+                vehicle_type=f"Convoy_{convoy_id}",
+                vehicle_action="convoy_passage",
+                convoy_id=convoy_id
+            )
+            aggregated_events.append(convoy_event)
+    
+    return aggregated_events
+
+
+def initialize_manifests(config: ExportConfig, base_dir: Path) -> Dict[str, csv.DictWriter]:
+    """Opens file handles and initializes CSV writers for the manifests."""
+    if not config.truth_file_config.enabled:
+        return {}
+
+    writers = {}
+    fieldnames = [
+        'clip_id', 'source_event_id', 'group_name', 'sensor_name', 
+        'event_start_utc', 'event_end_utc', 'clip_start_utc', 'clip_end_utc', 
+        'duration_s', 'file_path_relative', 'vehicle_type', 'action', 'direction', 'location',
+        'sample_rate', 'export_job_name'
+    ]
+
+    def create_writer(path: Path):
         try:
-            full_audio = questdb_client.query_raw_audio_data(collection, start_time.isoformat(), end_time.isoformat())
-            if full_audio.size > 0:
-                full_path = base_dir / f"{collection}_full.{format}"
-                save_audio_clip(full_path, full_audio, 48000, format)
-                logging.info(f"Saved full-length clip: {full_path}")
-                clips_created += 1
-        except Exception as e:
-            logging.error(f"Could not save full-length clip for {collection}: {e}")
-        if chunked:
-            for clip_start, clip_end in generate_windows(start_time, end_time, duration, overlap):
-                try:
-                    chunk_audio = questdb_client.query_raw_audio_data(collection, clip_start.isoformat(), clip_end.isoformat())
-                    if chunk_audio.size > 0:
-                        ts_str = clip_start.strftime('%Y%m%dT%H%M%S%f')[:-3]
-                        chunk_filename = f"{collection}_{ts_str}.{format}"
-                        chunk_path = base_dir / "chunks" / chunk_filename
-                        save_audio_clip(chunk_path, chunk_audio, 48000, format)
-                        clips_created += 1
-                except Exception as e:
-                    logging.error(f"Could not save chunk for {collection} at {clip_start}: {e}")
+            # Open in write mode ('w') to overwrite previous exports for the same job definition
+            f = open(path, 'w', newline='')
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            # Store the file handle on the writer object itself for easy closing later
+            writer._file_handle = f
+            return writer
+        except IOError as e:
+            logging.error(f"Could not open manifest file {path}: {e}")
+            raise
+
+    if config.truth_file_config.mode == "single":
+        manifest_path = base_dir / config.truth_file_config.filename
+        writers["_master"] = create_writer(manifest_path)
+    
+    elif config.truth_file_config.mode == "per_group":
+        # Create a dedicated subfolder for manifests to keep the root clean
+        manifest_dir = base_dir / "manifests_by_location"
+        manifest_dir.mkdir(parents=True, exist_ok=True)
+
+        for group in config.groups:
+            # Filename format: JOBNAME_GROUPNAME_manifest.csv
+            job_name_sanitized = sanitize_for_path(config.export_job_name)
+            group_name_sanitized = sanitize_for_path(group.name)
+            filename = f"{job_name_sanitized}_{group_name_sanitized}_{config.truth_file_config.filename}"
+            manifest_path = manifest_dir / filename
+            
+            try:
+                writers[group.name] = create_writer(manifest_path)
+            except IOError:
+                # If creating one fails, clean up any already opened ones before raising
+                close_manifests(writers)
+                raise
+    
+    return writers
+
+def close_manifests(writers: Dict[str, csv.DictWriter]):
+    """Closes all open file handles associated with the manifest writers."""
+    for writer in writers.values():
+        # Check for the custom attribute where we stored the handle
+        if hasattr(writer, '_file_handle') and writer._file_handle and not writer._file_handle.closed:
+            try:
+                writer._file_handle.close()
+            except Exception as e:
+                logging.warning(f"Error closing manifest file handle: {e}")
+
+def process_event(db: Session, config: ExportConfig, event: Base, sensor_to_group_name: Dict[str, str], group_name_to_object: Dict[str, SensorGroup], base_dir: Path, writers: Dict[str, csv.DictWriter]) -> int:
+    """Processes a single source event, propagating it across relevant sensor groups."""
+    
+    # Ensure timestamps are timezone-aware (assuming DB stores them as naive UTC if tzinfo is missing)
+    event_start = event.start_timestamp
+    event_end = event.end_timestamp
+
+    # Handle potential non-datetime objects if aggregation returns different types
+    if not isinstance(event_start, datetime) or not isinstance(event_end, datetime):
+        logging.error(f"Event {event.id} timestamps are not datetime objects. Skipping.")
+        return 0
+
+    if event_start.tzinfo is None:
+        event_start = event_start.replace(tzinfo=timezone.utc)
+    if event_end.tzinfo is None:
+        event_end = event_end.replace(tzinfo=timezone.utc)
+
+    # Determine which groups are relevant for this event.
+    relevant_groups = determine_relevant_groups(config, event, sensor_to_group_name, group_name_to_object, event_start, event_end)
+    
+    if not relevant_groups:
+        # Logging handled inside determine_relevant_groups
+        return 0
+
+    clips_created = 0
+    for group in relevant_groups:
+        logging.info(f"Processing Event ID {event.id[:8]} for Group: {group.name} | Time: {event_start.isoformat()}")
+        
+        # For each relevant group, iterate over all sensors in that group
+        for target_sensor in group.collections:
+            # Determine the time windows (clips) to export for this specific sensor
+            if config.processing_config.windowing:
+                windows = list(generate_windows(event_start, event_end, config.processing_config.windowing))
+                if not windows:
+                     logging.debug(f"  Event duration ({(event_end-event_start).total_seconds():.2f}s) too short for window size. Skipping.")
+                     # Break the inner loop (windows) but continue to the next sensor
+                     continue
+            else:
+                # Export the full duration as a single window
+                windows = [(event_start, event_end)]
+            
+            for clip_start, clip_end in windows:
+                # Process and save the clip
+                success = export_clip(db, config, event, group, target_sensor, clip_start, clip_end, base_dir, writers)
+                if success:
+                    clips_created += 1
+    
     return clips_created
 
-@export.command(name="single-vehicle")
-@click.option('--output-dir', required=True, type=click.Path(file_okay=False))
-@click.option('--format', type=click.Choice(['flac', 'wav'], case_sensitive=False), default='wav', show_default=True)
-@click.option('--chunked', is_flag=True, default=False, show_default=True)
-@click.option('--duration', type=float, default=5.0, show_default=True)
-@click.option('--overlap', type=float, default=2.5, show_default=True)
-def export_single_vehicle(output_dir: str, format: str, chunked: bool, duration: float, overlap: float):
-    """Exports audio for single-vehicle events (not part of a convoy)."""
-    output_path = Path(output_dir)
-    run_id = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-    setup_logging(output_path, f"export_single_vehicle_{run_id}.log")
-    logging.info("--- Starting Single-Vehicle Data Export ---")
-    db = get_db_session()
-    events = db.query(Event).filter(Event.convoy_id.is_(None)).all()
-    logging.info(f"Found {len(events)} single-vehicle events.")
-    total_clips = 0
-    for event in events:
-        metadata = {'location': 'unknown', 'vehicle_type': event.vehicle_type, 'action': event.vehicle_action, 'direction': event.direction}
-        total_clips += _export_event_or_convoy(db, output_path, format, chunked, duration, overlap, event.start_timestamp, event.end_timestamp, metadata, "single_vehicle_runs", event.id)
-    logging.info(f"--- Single-Vehicle Export Complete --- \nTotal files created: {total_clips}")
-    db.close()
+def determine_relevant_groups(config: ExportConfig, event: Base, sensor_to_group_name: Dict[str, str], group_name_to_object: Dict[str, SensorGroup], start: datetime, end: datetime) -> List[SensorGroup]:
+    """Identifies which sensor groups should be included in the export for a given event. This implements location awareness."""
+    
+    # Method 1: Explicit association (common for refined_annotations or annotations)
+    # Try to find the sensor name directly on the event object.
+    primary_sensor = None
+    if hasattr(event, 'source_collection') and event.source_collection:
+        primary_sensor = event.source_collection
+    elif hasattr(event, 'sensor') and event.sensor:
+        primary_sensor = event.sensor
 
-@export.command(name="convoy")
-@click.option('--output-dir', required=True, type=click.Path(file_okay=False))
-@click.option('--format', type=click.Choice(['flac', 'wav'], case_sensitive=False), default='flac', show_default=True)
-@click.option('--convoy-id', 'specific_convoy_id', type=str, default=None)
-@click.option('--chunked', is_flag=True, default=False, show_default=True)
-@click.option('--duration', type=float, default=5.0, show_default=True)
-@click.option('--overlap', type=float, default=2.5, show_default=True)
-def export_convoy(output_dir: str, format: str, specific_convoy_id: Optional[str], chunked: bool, duration: float, overlap: float):
-    """Exports audio for entire convoys by aggregating event times."""
-    output_path = Path(output_dir)
-    run_id = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-    setup_logging(output_path, f"export_convoy_{run_id}.log")
-    logging.info("--- Starting Convoy Data Export ---")
-    db = get_db_session()
-    query = db.query(Convoy)
-    if specific_convoy_id:
-        query = query.filter(Convoy.id == specific_convoy_id)
-    convoys = query.all()
-    logging.info(f"Found {len(convoys)} convoys to process.")
-    total_clips = 0
-    for convoy in convoys:
-        result = db.execute(text("SELECT MIN(start_timestamp), MAX(end_timestamp) FROM events WHERE convoy_id = :cid"), {'cid': convoy.id}).fetchone()
-        if not result or not result[0]:
-            logging.warning(f"Convoy {convoy.id} has no events. Skipping.")
-            continue
-        convoy_start, convoy_end = result
-        metadata = {'location': 'convoy_run', 'vehicle_type': f"convoy_{convoy.convoy_number}", 'action': 'convoy', 'direction': convoy.direction}
-        total_clips += _export_event_or_convoy(db, output_path, format, chunked, duration, overlap, convoy_start, convoy_end, metadata, "convoy_runs", convoy.id)
-    logging.info(f"--- Convoy Export Complete --- \nTotal files created: {total_clips}")
-    db.close()
+    if primary_sensor:
+        group_name = sensor_to_group_name.get(primary_sensor)
+        if group_name and group_name in group_name_to_object:
+            # If the event is explicitly linked to a sensor in a known group, use only that group.
+            return [group_name_to_object[group_name]]
+        else:
+            # Gotcha: Event sensor not in any configured group
+            logging.info(f"Event ID {event.id} sensor '{primary_sensor}' is not in any configured export group. Skipping.")
+            return []
+
+    # Method 2: Implicit association (common for generic 'events' table, e.g., single_vehicle/convoy)
+    # If no primary sensor is listed on the event, we must check which groups have data during the event time.
+    
+    if config.export_type in ["single_vehicle", "convoy", "generic"]:
+        logging.debug(f"Event ID {event.id} has no explicit sensor. Checking data availability across groups.")
+        relevant = []
+        if not questdb_client:
+             logging.error("QuestDB client not available. Cannot check data existence.")
+             return []
+             
+        for group in config.groups:
+            # A robust check ensures the reference sensor for the group has data during the event time.
+            if questdb_client.check_data_exists(group.reference_sensor, start.isoformat(), end.isoformat()):
+                relevant.append(group)
+            else:
+                logging.debug(f"Group '{group.name}' excluded for event {event.id}: reference sensor '{group.reference_sensor}' lacks data in the time range.")
+        return relevant
+    
+    # If model_training type and no explicit sensor, we cannot determine the group reliably.
+    logging.info(f"Event ID {event.id} (Type: {config.export_type}) lacks sensor identifier and cannot be associated with a group. Skipping.")
+    return []
+
+def export_clip(db: Session, config: ExportConfig, event: Base, group: SensorGroup, target_sensor: str, clip_start: datetime, clip_end: datetime, base_dir: Path, writers: Dict[str, csv.DictWriter]) -> bool:
+    """Handles the fetching, processing, saving, and manifest writing for a single audio clip."""
+    
+    # 1. Fetch and Process Audio (Handles sample rate determination and resampling)
+    audio_data, final_sr = fetch_and_process_audio(db, target_sensor, clip_start, clip_end, config.processing_config.target_sample_rate)
+    
+    if audio_data is None or audio_data.size == 0:
+        # Logged in fetch_and_process_audio, just return failure
+        return False
+
+    # 2. Generate Output Path and Clip ID
+    event_id_prefix = sanitize_for_path(event.id[:8])
+    # Format timestamp for filename: YYYYMMDDTHHMMSSmmm (ISO-like but filename safe)
+    clip_start_ts_str = clip_start.strftime('%Y%m%dT%H%M%S%f')[:-3]
+    clip_id = f"{event_id_prefix}_{target_sensor}_{clip_start_ts_str}"
+
+    # Gather and sanitize template variables
+    # We use getattr to safely access attributes that might differ between source tables (Event vs RefinedAnnotation)
+    template_vars = {
+        "group_name": sanitize_for_path(group.name),
+        "vehicle_type": sanitize_for_path(getattr(event, 'vehicle_type', None)),
+        "event_id": sanitize_for_path(event.id),
+        "event_id_prefix": event_id_prefix,
+        "convoy_id": sanitize_for_path(getattr(event, 'convoy_id', None)),
+        "sensor_name": sanitize_for_path(target_sensor),
+        "clip_start_ts": clip_start_ts_str,
+        "clip_id": clip_id, 
+        "format": config.output_config.format.lower(),
+        # Handle variations in action naming (e.g., 'action' vs 'vehicle_action')
+        "action": sanitize_for_path(getattr(event, 'action', getattr(event, 'vehicle_action', None))),
+        "location": sanitize_for_path(getattr(event, 'location', None)),
+        "direction": sanitize_for_path(getattr(event, 'direction', None)),
+    }
+
+    try:
+        relative_path_str = config.output_config.file_path_template.format(**template_vars)
+        output_path = base_dir / relative_path_str
+    except KeyError as e:
+        logging.error(f"Invalid variable in file_path_template: {e}. Check configuration template variables. Skipping clip.")
+        return False
+    except Exception as e:
+        logging.error(f"Error formatting file path template: {e}. Skipping clip.")
+        return False
+
+    # 3. Save Audio Clip
+    try:
+        save_audio_clip(output_path, audio_data, final_sr, config.output_config.format)
+    except Exception:
+        # Error logged in save_audio_clip
+        return False
+
+    # 4. Write Manifest Entry
+    if config.truth_file_config.enabled:
+        # Determine the correct writer
+        writer = None
+        if config.truth_file_config.mode == "single":
+            writer = writers.get("_master")
+        elif config.truth_file_config.mode == "per_group":
+            writer = writers.get(group.name)
+        
+        if writer:
+            try:
+                # Ensure timestamps are correctly formatted ISO strings for the manifest
+                # Handle potential non-datetime objects if source data is inconsistent
+                event_start_iso = event.start_timestamp.isoformat() if isinstance(event.start_timestamp, datetime) else str(event.start_timestamp)
+                event_end_iso = event.end_timestamp.isoformat() if isinstance(event.end_timestamp, datetime) else str(event.end_timestamp)
+
+                writer.writerow({
+                    'clip_id': clip_id,
+                    'source_event_id': event.id,
+                    'group_name': group.name,
+                    'sensor_name': target_sensor,
+                    'event_start_utc': event_start_iso,
+                    'event_end_utc': event_end_iso,
+                    'clip_start_utc': clip_start.isoformat(),
+                    'clip_end_utc': clip_end.isoformat(),
+                    'duration_s': (clip_end - clip_start).total_seconds(),
+                    'file_path_relative': relative_path_str,
+                    'vehicle_type': template_vars['vehicle_type'],
+                    'action': template_vars['action'],
+                    'direction': template_vars['direction'],
+                    'location': template_vars['location'],
+                    'sample_rate': final_sr,
+                    'export_job_name': config.export_job_name
+                })
+            except Exception as e:
+                logging.error(f"Failed to write manifest entry for clip {clip_id}: {e}")
+                # Continue execution even if manifest writing fails
+
+    return True
+
+
+# --- CLI Interface ---
+
+# Unified CLI entry point
+@click.group()
+def cli():
+    """A unified CLI tool for exporting annotated audio data."""
+    # Ensure basic logging is set up if not already configured
+    if not logging.getLogger().hasHandlers():
+        logging.basicConfig(level=logging.WARNING, format='%(levelname)s: %(message)s')
+
+# Replace the old commands (model-training, single-vehicle, convoy) with a single 'run' command.
+@cli.command(name="run")
+@click.argument('config_path', type=click.Path(exists=True, dir_okay=False))
+@click.option('--output-dir', type=click.Path(file_okay=False), default=None, help='Override the base_directory specified in the config.')
+def run_export_cli(config_path: str, output_dir: Optional[str]):
+    """
+    Executes an export job based on a unified JSON configuration file (CONFIG_PATH).
+    """
+    
+    try:
+        config = ExportConfig.from_json(config_path)
+    except Exception as e:
+        # Use print here as logging might not be fully set up until run_export_job
+        print(f"ERROR: Failed to load or validate configuration file '{config_path}': {e}")
+        exit(1)
+
+    if output_dir:
+        # Override the output directory if provided via CLI
+        config.output_config.base_directory = Path(output_dir)
+
+    try:
+        run_export_job(config)
+    except Exception as e:
+        # Logging is active inside run_export_job
+        logging.error(f"Export job failed with critical error: {e}", exc_info=True)
+        exit(1)
 
 if __name__ == '__main__':
+    # Ensure compatibility with multiprocessing if the underlying libraries use it
     from multiprocessing import freeze_support
     freeze_support()
-    export()
+    cli()
