@@ -1,5 +1,5 @@
 # backend/data_exporter.py
-# Unified Data Export Engine
+# backend/data_exporter.py
 import os
 import csv
 import logging
@@ -13,33 +13,10 @@ from sqlalchemy import create_engine, text, inspect, func
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy import Column, String, DateTime, Integer
 
-# IMPLEMENTATION: Import new dependencies
-try:
-    # Use relative imports for package structure
-    from .export_config import ExportConfig, WindowingConfig, SensorGroup
-    from .audio_processor import AudioProcessor
-    from . import questdb_client
-    # Import SensorMetadata for sample rate lookup
-    from .models_sqlalchemy import SensorMetadata
-except ImportError:
-    # Fallback for different execution environments or if run standalone
-    print("Warning: Failed to perform relative imports. Attempting direct imports (if backend is in PYTHONPATH).")
-    try:
-        from backend.export_config import ExportConfig, WindowingConfig, SensorGroup
-        from backend.audio_processor import AudioProcessor
-        from backend import questdb_client
-        from backend.models_sqlalchemy import SensorMetadata
-    except ImportError as e:
-        print(f"Error: Missing required backend modules: {e}. Ensure backend package is correctly structured.")
-        # Define placeholders if imports fail completely, to allow script initialization
-        class ExportConfig: pass
-        class WindowingConfig: pass
-        class SensorGroup: pass
-        class SensorMetadata: pass
-        class AudioProcessor:
-            def resample_audio(self, *args): raise NotImplementedError("AudioProcessor unavailable")
-        questdb_client = None
-
+from .export_config import ExportConfig, WindowingConfig, SensorGroup
+from .audio_processor import AudioProcessor
+from . import questdb_client
+from .models_sqlalchemy import SensorMetadata
 
 # --- Configuration & Setup ---
 
@@ -180,6 +157,22 @@ def generate_windows(start_time: datetime, end_time: datetime, window_config: Wi
     while current_start + duration_delta <= end_time:
         yield current_start, current_start + duration_delta
         current_start += step_delta
+
+def generate_windows_with_final_capture(start_time: datetime, end_time: datetime, window_config: WindowingConfig):
+    """Generates windows with pre-boundary final window to avoid data loss."""
+    windows = list(generate_windows(start_time, end_time, window_config))  # Current logic
+    
+    if windows:
+        last_window_end = windows[-1][1]
+        remaining_duration = (end_time - last_window_end).total_seconds()
+        
+        # If there's significant remaining data, create an overlapping final window
+        if remaining_duration > window_config.window_size_seconds * 0.3:  # 30% threshold
+            final_start = end_time - timedelta(seconds=window_config.window_size_seconds)
+            if final_start > windows[-1][0]:  # Avoid duplicate
+                windows.append((final_start, end_time))
+    
+    return windows
 
 def get_sensor_sample_rate(db: Session, collection_name: str) -> int:
     """Retrieves the sample rate from metadata, falling back to a default if not found."""
@@ -515,7 +508,7 @@ def process_event(db: Session, config: ExportConfig, event: Base, sensor_to_grou
         for target_sensor in group.collections:
             # Determine the time windows (clips) to export for this specific sensor
             if config.processing_config.windowing:
-                windows = list(generate_windows(event_start, event_end, config.processing_config.windowing))
+                windows = generate_windows_with_final_capture(event_start, event_end, config.processing_config.windowing)
                 if not windows:
                      logging.debug(f"  Event duration ({(event_end-event_start).total_seconds():.2f}s) too short for window size. Skipping.")
                      # Break the inner loop (windows) but continue to the next sensor
