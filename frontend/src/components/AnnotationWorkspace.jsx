@@ -7,7 +7,7 @@ import './AnnotationWorkspace.css';
 import { parseISOString, formatForInput } from '../utils/time';
 
 const DURATION_OPTIONS = [5, 10, 20, 50, 100];
-const FIXED_WINDOW_OPTIONS = [5, 8, 10, 15];
+const FIXED_WINDOW_OPTIONS = [5, 8, 10, 15, 12];
 const defaultAnnotationState = { vehicle_type: '', location: 'fastpass', action: 'driveby', direction: 'na', annotator_notes: '' };
 
 const generateSensorColor = (name) => {
@@ -58,7 +58,15 @@ function AnnotationWorkspace({
         setStartTime(jumpToData.startTime);
         setDurationSecs(jumpToData.durationSecs);
         setSelectionRange({});
-        setGlobalAnnotation({ ...defaultAnnotationState, vehicle_type: jumpToData.sourceEvent?.vehicle_type || '' });
+        setGlobalAnnotation({
+            ...defaultAnnotationState, // SPREAD operator is now correctly used.
+            vehicle_type: jumpToData.sourceEvent?.vehicle_type || '',
+            location: jumpToData.sourceEvent?.location || defaultAnnotationState.location,
+            action: jumpToData.sourceEvent?.action || defaultAnnotationState.action,
+            direction: jumpToData.sourceEvent?.direction || defaultAnnotationState.direction,
+            // I'm keeping the fix for the notes field as well for completeness.
+            annotator_notes: (jumpToData.sourceEvent?.annotator_notes || jumpToData.sourceEvent?.annotation) || ''
+        });
     }
   }, [jumpToData]);
 
@@ -119,6 +127,7 @@ function AnnotationWorkspace({
             start_timestamp: range.start.toISOString(),
             end_timestamp: range.end.toISOString(),
         };
+        console.log("PAYLOAD:", JSON.stringify(payload, null, 2));
         return axios.post('/api/annotations/refined', payload);
     });
 

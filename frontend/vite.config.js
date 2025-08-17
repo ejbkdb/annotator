@@ -9,9 +9,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        // --- THIS IS THE CHANGE ---
-        target: 'http://localhost:8000', // Use localhost to avoid corporate proxy issues
-        // --- END OF CHANGE ---
+        target: 'http://127.0.0.1:8080',
         changeOrigin: true,
         secure: false,
       },

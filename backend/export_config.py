@@ -45,6 +45,11 @@ class WindowingConfig(BaseModel):
 class ProcessingConfig(BaseModel):
     # If None, the system will attempt to discover the original rate from SensorMetadata.
     target_sample_rate: Optional[int] = Field(None, gt=0, description="If set, resample all exported audio to this rate. If None, keep original.")
+    
+    # --- MODIFICATION: Added padding_seconds ---
+    padding_seconds: Optional[float] = Field(None, ge=0, description="If set, adds this many seconds of padding to the start and end of the source event's duration.")
+    # --- END MODIFICATION ---
+
     windowing: Optional[WindowingConfig] = Field(None, description="If set, chunk the audio based on window and overlap. If None, export the full event duration.")
 
 class OutputConfig(BaseModel):

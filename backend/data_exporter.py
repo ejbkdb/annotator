@@ -1,5 +1,4 @@
 # backend/data_exporter.py
-# backend/data_exporter.py
 import os
 import csv
 import logging
@@ -476,54 +475,66 @@ def close_manifests(writers: Dict[str, csv.DictWriter]):
             except Exception as e:
                 logging.warning(f"Error closing manifest file handle: {e}")
 
+# --- MODIFICATION: Updated to handle padding ---
 def process_event(db: Session, config: ExportConfig, event: Base, sensor_to_group_name: Dict[str, str], group_name_to_object: Dict[str, SensorGroup], base_dir: Path, writers: Dict[str, csv.DictWriter]) -> int:
-    """Processes a single source event, propagating it across relevant sensor groups."""
+    """Processes a single source event, applying padding and propagating it across relevant sensor groups."""
     
-    # Ensure timestamps are timezone-aware (assuming DB stores them as naive UTC if tzinfo is missing)
-    event_start = event.start_timestamp
-    event_end = event.end_timestamp
+    # 1. Get original event timestamps and ensure they are timezone-aware
+    event_start_original = event.start_timestamp
+    event_end_original = event.end_timestamp
 
-    # Handle potential non-datetime objects if aggregation returns different types
-    if not isinstance(event_start, datetime) or not isinstance(event_end, datetime):
+    if not isinstance(event_start_original, datetime) or not isinstance(event_end_original, datetime):
         logging.error(f"Event {event.id} timestamps are not datetime objects. Skipping.")
         return 0
 
-    if event_start.tzinfo is None:
-        event_start = event_start.replace(tzinfo=timezone.utc)
-    if event_end.tzinfo is None:
-        event_end = event_end.replace(tzinfo=timezone.utc)
+    if event_start_original.tzinfo is None:
+        event_start_original = event_start_original.replace(tzinfo=timezone.utc)
+    if event_end_original.tzinfo is None:
+        event_end_original = event_end_original.replace(tzinfo=timezone.utc)
 
-    # Determine which groups are relevant for this event.
-    relevant_groups = determine_relevant_groups(config, event, sensor_to_group_name, group_name_to_object, event_start, event_end)
+    # 2. Apply padding from the configuration if specified
+    padding_s = config.processing_config.padding_seconds
+    if padding_s and padding_s > 0:
+        padding_delta = timedelta(seconds=padding_s)
+        event_start_padded = event_start_original - padding_delta
+        event_end_padded = event_end_original + padding_delta
+        logging.info(f"Event ID {event.id[:8]}: Applied {padding_s}s padding. New range: {event_start_padded.isoformat()} -> {event_end_padded.isoformat()}")
+    else:
+        event_start_padded = event_start_original
+        event_end_padded = event_end_original
+    
+    # 3. Determine which groups are relevant based on the (padded) time range
+    relevant_groups = determine_relevant_groups(config, event, sensor_to_group_name, group_name_to_object, event_start_padded, event_end_padded)
     
     if not relevant_groups:
-        # Logging handled inside determine_relevant_groups
         return 0
 
     clips_created = 0
     for group in relevant_groups:
-        logging.info(f"Processing Event ID {event.id[:8]} for Group: {group.name} | Time: {event_start.isoformat()}")
+        logging.info(f"Processing Event ID {event.id[:8]} for Group: {group.name}")
         
-        # For each relevant group, iterate over all sensors in that group
+        # 4. For each relevant group, iterate over all its sensors
         for target_sensor in group.collections:
-            # Determine the time windows (clips) to export for this specific sensor
+            # 5. Determine the time windows (clips) to export using the padded duration
             if config.processing_config.windowing:
-                windows = generate_windows_with_final_capture(event_start, event_end, config.processing_config.windowing)
+                # If chunking, generate windows within the padded duration
+                windows = generate_windows_with_final_capture(event_start_padded, event_end_padded, config.processing_config.windowing)
                 if not windows:
-                     logging.debug(f"  Event duration ({(event_end-event_start).total_seconds():.2f}s) too short for window size. Skipping.")
-                     # Break the inner loop (windows) but continue to the next sensor
+                     logging.debug(f"  Padded duration ({(event_end_padded - event_start_padded).total_seconds():.2f}s) too short for windowing. Skipping sensor {target_sensor}.")
                      continue
             else:
-                # Export the full duration as a single window
-                windows = [(event_start, event_end)]
+                # If not chunking, the single window is the entire padded duration
+                windows = [(event_start_padded, event_end_padded)]
             
+            # 6. Process and save each clip (either a chunk or the full padded clip)
             for clip_start, clip_end in windows:
-                # Process and save the clip
+                # Pass original event times to export_clip for metadata, but use clip times for audio
                 success = export_clip(db, config, event, group, target_sensor, clip_start, clip_end, base_dir, writers)
                 if success:
                     clips_created += 1
     
     return clips_created
+# --- END MODIFICATION ---
 
 def determine_relevant_groups(config: ExportConfig, event: Base, sensor_to_group_name: Dict[str, str], group_name_to_object: Dict[str, SensorGroup], start: datetime, end: datetime) -> List[SensorGroup]:
     """Identifies which sensor groups should be included in the export for a given event. This implements location awareness."""
